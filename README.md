@@ -48,7 +48,19 @@ To load a real document from your d.velop/ECM instance (e.g. same as `sections/v
 npm run build
 ```
 
-Output in `dist/`. Deploy the contents to a URL (e.g. Netlify, your server). The host sets `BUNDLE_URL` or `?bundle=` to the entry script, e.g. `https://your-app.netlify.app/assets/index-xxx.js`.
+Output in `dist/` (SPA: index.html + hashed assets).
+
+**Single-file bundle (for script-tag loading):**
+
+```bash
+npm run build:bundle
+```
+
+Produces `dist/assets/vue-app.js` (fixed name). Use this URL in the host’s `sections-vue/config.js`:
+
+`https://septimiu-bitea.github.io/cloud-edit-form/assets/vue-app.js`
+
+The GitHub Actions workflow runs both builds and deploys; the site and `vue-app.js` are both available.
 
 ## Use with the ECM host
 
