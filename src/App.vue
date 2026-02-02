@@ -1,7 +1,7 @@
 <template>
-  <v-app>
-    <v-main>
-      <v-container fluid>
+  <v-app class="vue-embed-app">
+    <v-main class="vue-embed-main">
+      <v-container fluid class="fill-height" style="align-items: flex-start;">
         <v-alert
           v-if="!context"
           type="info"
@@ -42,3 +42,14 @@ export default {
   }
 }
 </script>
+
+<style scoped>
+/* When mounted inside #vue-app, fill the host area and align content to top */
+.vue-embed-app {
+  height: 100%;
+  min-height: 0;
+}
+.vue-embed-main {
+  align-items: flex-start;
+}
+</style>
