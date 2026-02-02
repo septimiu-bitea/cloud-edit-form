@@ -1,0 +1,281 @@
+<template>
+  <v-card>
+    <v-card-title class="d-flex align-center">
+      <span>{{ t(locale, 'editDocument') }}</span>
+      <v-spacer />
+      <v-btn
+        v-if="loaded"
+        color="primary"
+        :loading="saveLoading"
+        :disabled="saveLoading"
+        @click="onSave"
+      >
+        {{ t(locale, 'save') }}
+      </v-btn>
+    </v-card-title>
+    <v-card-subtitle v-if="docId">{{ t(locale, 'documentId') }}: {{ docId }}</v-card-subtitle>
+    <v-card-text>
+      <v-progress-linear v-if="loading" indeterminate color="primary" class="mb-4" />
+      <v-alert v-else-if="error" type="error" variant="tonal" class="mb-4">
+        {{ error }}
+      </v-alert>
+      <template v-else-if="loaded">
+        <v-tabs v-model="activeTab" color="primary" class="mb-2">
+          <v-tab value="properties">{{ t(locale, 'tabProperties') }}</v-tab>
+          <v-tab value="system">{{ t(locale, 'tabSystem') }}</v-tab>
+        </v-tabs>
+        <v-divider class="mb-3" />
+        <v-tabs-window v-model="activeTab">
+          <v-tabs-window-item value="properties">
+            <v-checkbox
+              v-model="showMultivalueOnly"
+              :label="t(locale, 'showMultivalueOnly')"
+              hide-details
+              density="compact"
+              class="mb-2"
+            />
+            <CategoryFormView
+              v-model="formData"
+              :properties="categoryOnlyPropertiesFiltered"
+              :current-locale="locale"
+              delimiter=";"
+              :fetch-property-values-from-doc="fetchPropertyValuesFromDoc"
+              @submit="onSave"
+            />
+          </v-tabs-window-item>
+          <v-tabs-window-item value="system">
+            <SystemPropertiesView :system-properties="systemPropertiesList" :current-locale="locale" />
+          </v-tabs-window-item>
+        </v-tabs-window>
+      </template>
+    </v-card-text>
+
+    <v-snackbar
+      v-model="snackbar.show"
+      :color="snackbar.color"
+      :timeout="4000"
+      location="bottom"
+    >
+      {{ snackbar.text }}
+    </v-snackbar>
+  </v-card>
+</template>
+
+<script>
+import CategoryFormView from '@/components/CategoryFormView.vue'
+import SystemPropertiesView from '@/components/SystemPropertiesView.vue'
+import { createApi, usedRepoId } from '@/services/api'
+import {
+  toMetaIndex,
+  makePrevMap,
+  collectSourceProperties,
+  buildO2mPayload,
+  putO2mUpdate
+} from '@/services/submission'
+import { resolveDocIdFromProcess } from '@/utils/docId'
+import { mapIdtoUniqueId } from '@/utils/idMapping'
+import { categoryOnlyProperties as filterCategoryOnly } from '@/utils/systemProperties'
+import { buildO2ValueIndex, buildInitialValuesFromIndex, extractValuesForUuidFromO2 } from '@/utils/valueExtraction'
+import { t } from '@/utils/i18n'
+
+export default {
+  name: 'EditView',
+  components: { CategoryFormView, SystemPropertiesView },
+  inject: {
+    formInitContext: { default: null }
+  },
+  data () {
+    return {
+      loading: false,
+      error: null,
+      loaded: false,
+      saveLoading: false,
+      docId: '',
+      repoId: '',
+      categoryId: '',
+      base: '',
+      locale: 'en',
+      categoryProperties: [],
+      initialValues: {},
+      formData: {},
+      idMap: {},
+      o2mPrev: {},
+      srmItem: null,
+      o2Response: null,
+      metaIdx: null,
+      snackbar: {
+        show: false,
+        text: '',
+        color: 'success'
+      },
+      activeTab: 'properties',
+      showMultivalueOnly: true
+    }
+  },
+  computed: {
+    systemPropertiesList () {
+      const arr = this.o2Response?.systemProperties
+      return Array.isArray(arr) ? arr : []
+    },
+    categoryOnlyProperties () {
+      return filterCategoryOnly(this.categoryProperties)
+    },
+    categoryOnlyPropertiesFiltered () {
+      const list = this.categoryOnlyProperties
+      if (!this.showMultivalueOnly) return list
+      return list.filter(p => p?.isMultiValue)
+    }
+  },
+  async mounted () {
+    const ctx = this.formInitContext
+    if (!ctx?.base) {
+      this.error = this.t(ctx?.uiLocale || 'en', 'errorNoContext')
+      return
+    }
+    this.base = ctx.base
+    this.locale = ctx.uiLocale || 'en'
+
+    const docIdFromForm = ctx.form?.submission?.data?.docId ?? ctx.data?.docId
+    const docIdFromProcess =
+      typeof window !== 'undefined' && window.resolveDocIdFromProcess
+        ? window.resolveDocIdFromProcess({ log: false })
+        : resolveDocIdFromProcess({ log: false })
+    this.docId = docIdFromForm || docIdFromProcess || ''
+
+    if (!this.docId) {
+      this.error = this.t(this.locale, 'errorNoDocId')
+      return
+    }
+
+    this.loading = true
+    this.error = null
+    try {
+      const apiKey = import.meta.env.VITE_API_KEY || undefined
+      const Dv = createApi({ base: this.base, locale: this.locale, apiKey })
+      this.repoId = usedRepoId(this.base)
+      if (!this.repoId) {
+        this.error = this.t(this.locale, 'errorNoRepo')
+        return
+      }
+
+      const srmResp = await Dv.srm(this.base, this.repoId, this.docId)
+      const firstItem = Array.isArray(srmResp?.items) ? srmResp.items[0] : null
+      if (!firstItem) {
+        this.error = this.t(this.locale, 'errorSrmNoItem')
+        return
+      }
+      this.srmItem = firstItem
+
+      // Normalize category ID: SRM can return sourceCategories[0] as object; extract string ID (match sections/13-entry-point.js)
+      const c3 = firstItem?.sourceCategories?.[0] ?? firstItem?.category
+      let catId = ''
+      if (typeof c3 === 'string' || typeof c3 === 'number') {
+        catId = String(c3)
+      } else if (c3 && typeof c3 === 'object') {
+        const raw = c3.id ?? c3.categoryId ?? c3.uuid ?? c3.uniqueId ?? c3.key ?? ''
+        catId = typeof raw === 'string' || typeof raw === 'number' ? String(raw) : ''
+      }
+      this.categoryId = (catId || '').trim()
+      if (!this.categoryId) {
+        this.error = this.t(this.locale, 'errorNoCategory')
+        return
+      }
+
+      const [catP, o2Resp, od] = await Promise.all([
+        Dv.catProps(this.base, this.repoId, this.categoryId),
+        Dv.o2(this.base, this.repoId, this.docId),
+        Dv.objdefs(this.base, this.repoId)
+      ])
+
+      const { idToUniqueId } = mapIdtoUniqueId(od?.raw ?? {})
+      this.idMap = idToUniqueId || {}
+
+      const o2Index = buildO2ValueIndex(o2Resp, this.idMap)
+      this.initialValues = buildInitialValuesFromIndex(catP.arr, {
+        o2Index,
+        srmItem: firstItem,
+        idMap: this.idMap
+      })
+      this.categoryProperties = catP.arr || []
+      this.o2Response = o2Resp
+
+      this.formData = { ...this.initialValues }
+      this.o2mPrev = makePrevMap(
+        o2Resp,
+        firstItem,
+        this.categoryProperties,
+        this.idMap,
+        this.formData
+      )
+      this.metaIdx = toMetaIndex(this.categoryProperties, { idMap: this.idMap })
+      this.loaded = true
+    } catch (e) {
+      this.error = e?.message || String(e)
+      console.error('[EditView] load failed', e)
+    } finally {
+      this.loading = false
+    }
+  },
+  methods: {
+    t,
+    async onSave () {
+      if (this.saveLoading || !this.loaded) return
+      this.saveLoading = true
+      this.snackbar.show = false
+      try {
+        const { properties } = collectSourceProperties(
+          this.formData,
+          this.o2mPrev,
+          this.metaIdx
+        )
+        if (properties.length === 0) {
+          this.snackbar = { show: true, text: this.t(this.locale, 'noChangesToSave'), color: 'info' }
+          return
+        }
+        const payload = buildO2mPayload({
+          sourceProperties: { properties }
+        })
+        const result = await putO2mUpdate({
+          base: this.base,
+          repoId: this.repoId,
+          dmsObjectId: this.docId,
+          payload,
+          apiKey: import.meta.env.VITE_API_KEY || undefined
+        })
+        if (result.ok) {
+          this.o2mPrev = makePrevMap(
+            this.o2Response,
+            this.srmItem,
+            this.categoryProperties,
+            this.idMap,
+            this.formData
+          )
+          this.snackbar = { show: true, text: this.t(this.locale, 'savedSuccessfully'), color: 'success' }
+        } else {
+          const msg = result.json?.message || result.text || this.t(this.locale, 'saveFailedWithStatus', result.status)
+          this.snackbar = { show: true, text: msg, color: 'error' }
+        }
+      } catch (e) {
+        this.snackbar = {
+          show: true,
+          text: e?.message || String(e),
+          color: 'error'
+        }
+        console.error('[EditView] save failed', e)
+      } finally {
+        this.saveLoading = false
+      }
+    },
+    /** For multivalue Import from Doc ID: fetch O2 for docId and return values for propertyId. */
+    async fetchPropertyValuesFromDoc (docId, propertyId) {
+      if (!docId || !propertyId || !this.base || !this.repoId) return []
+      const apiKey = import.meta.env.VITE_API_KEY || undefined
+      const Dv = createApi({ base: this.base, locale: this.locale, apiKey })
+      const o2Resp = await Dv.o2(this.base, this.repoId, docId)
+      if (!o2Resp?.id) throw new Error('Document not found.')
+      const values = extractValuesForUuidFromO2(o2Resp, propertyId, this.idMap || {}, { isMulti: true, dataType: 'STRING' })
+      return Array.isArray(values) ? values.map(v => String(v ?? '')) : []
+    }
+  }
+}
+</script>
