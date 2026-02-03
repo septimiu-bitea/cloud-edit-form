@@ -1,7 +1,7 @@
 <template>
   <v-app class="vue-embed-app">
     <v-main class="vue-embed-main">
-      <v-container fluid class="fill-height" style="align-items: flex-start;">
+      <v-container fluid class="vue-embed-container">
         <v-alert
           v-if="!context"
           type="info"
@@ -44,12 +44,30 @@ export default {
 </script>
 
 <style scoped>
-/* When mounted inside #vue-app, fill the host area and align content to top */
+/* Fixed height: no app-level scroll; only tab content scrolls */
 .vue-embed-app {
   height: 100%;
-  min-height: 0;
+  min-height: 100vh;
+  max-height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 .vue-embed-main {
-  align-items: flex-start;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.vue-embed-container {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  padding-top: 0;
+  padding-bottom: 0;
 }
 </style>

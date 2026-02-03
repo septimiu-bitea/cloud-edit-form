@@ -98,6 +98,33 @@ export function buildO2ValueIndex (o2json, idMap = {}) {
     if (id && idMap[id]) idx[idMap[id]] = arr
   })
 
+  // On-premise: O2 often returns extendedProperties (object keyed by id) instead of
+  // objectProperties / multivalueProperties. Index them so normal and multivalue values populate.
+  const ext = o2json.extendedProperties
+  if (ext && typeof ext === 'object' && !Array.isArray(ext)) {
+    for (const [id, val] of Object.entries(ext)) {
+      const k = String(id ?? '').trim()
+      if (!k) continue
+      const isSlotMap = val != null && typeof val === 'object' && !Array.isArray(val) && Object.keys(val).every(key => /^\d+$/.test(key))
+      const isArrayMulti = Array.isArray(val)
+      let value
+      if (isSlotMap) {
+        value = Object.keys(val)
+          .sort((a, b) => Number(a) - Number(b))
+          .map(slot => val[slot])
+          .filter(v => v != null && String(v).trim() !== '')
+      } else if (isArrayMulti) {
+        value = val.filter(v => v != null && String(v).trim() !== '')
+      } else {
+        value = (val != null && val !== '' ? val : null)
+      }
+      if (value == null && !isSlotMap && !isArrayMulti) continue
+      if (k) idx[k] = value
+      idx['property_' + k] = value
+      if (idMap[k]) idx[idMap[k]] = value
+    }
+  }
+
   if (o2json.id) idx.DOCUMENT_ID = o2json.id
   return idx
 }
@@ -114,6 +141,7 @@ export function buildInitialValuesFromIndex (catProps = [], { o2Index = null, sr
     }
     if (v == null && key === 'DOCUMENT_ID') v = index.property_document_id ?? index.DOCUMENT_ID
     if (v == null && key === 'CATEGORY') v = index.property_category ?? index.CATEGORY
+    // On-premise: index may be keyed by numeric id or property_<id>
     if (v == null) v = index['property_' + key]
     return v
   }
@@ -175,6 +203,22 @@ export function extractValuesForUuidFromO2 (o2Json, uuid, idMap, { isMulti, data
   if (hitSp) {
     const val = coerce(hitSp.value)
     return isMulti ? (val == null || val === '' ? [] : [val]) : (val == null ? [] : [val])
+  }
+
+  // On-premise: extendedProperties object keyed by id
+  const ext = o2Json.extendedProperties
+  if (ext && typeof ext === 'object' && !Array.isArray(ext)) {
+    for (const id of wantIds) {
+      const val = ext[id] ?? ext['property_' + id]
+      if (val == null) continue
+      if (Array.isArray(val)) return isMulti ? val.map(coerce) : (val.length ? [coerce(val[0])] : [])
+      const isSlotMap = typeof val === 'object' && Object.keys(val).every(key => /^\d+$/.test(key))
+      if (isSlotMap) {
+        const arr = Object.keys(val).sort((a, b) => Number(a) - Number(b)).map(slot => coerce(val[slot]))
+        return isMulti ? arr : (arr.length ? [arr[0]] : [])
+      }
+      return isMulti ? [coerce(val)] : [coerce(val)]
+    }
   }
   return []
 }

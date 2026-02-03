@@ -1,6 +1,6 @@
 <template>
-  <v-card>
-    <v-card-title class="d-flex align-center">
+  <v-card class="edit-view-card">
+    <v-card-title class="d-flex align-center flex-shrink-0">
       <span>{{ t(locale, 'editDocument') }}</span>
       <v-spacer />
       <v-btn
@@ -13,38 +13,42 @@
         {{ t(locale, 'save') }}
       </v-btn>
     </v-card-title>
-    <v-card-subtitle v-if="docId">{{ t(locale, 'documentId') }}: {{ docId }}</v-card-subtitle>
-    <v-card-text>
+    <v-card-subtitle v-if="docId" class="flex-shrink-0">{{ t(locale, 'documentId') }}: {{ docId }}</v-card-subtitle>
+    <v-card-text class="edit-view-card-text">
       <v-progress-linear v-if="loading" indeterminate color="primary" class="mb-4" />
       <v-alert v-else-if="error" type="error" variant="tonal" class="mb-4">
         {{ error }}
       </v-alert>
       <template v-else-if="loaded">
-        <v-tabs v-model="activeTab" color="primary" class="mb-2">
+        <v-tabs v-model="activeTab" color="primary" class="mb-2 flex-shrink-0">
           <v-tab value="properties">{{ t(locale, 'tabProperties') }}</v-tab>
           <v-tab value="system">{{ t(locale, 'tabSystem') }}</v-tab>
         </v-tabs>
-        <v-divider class="mb-3" />
-        <v-tabs-window v-model="activeTab">
-          <v-tabs-window-item value="properties">
-            <v-checkbox
-              v-model="showMultivalueOnly"
-              :label="t(locale, 'showMultivalueOnly')"
-              hide-details
-              density="compact"
-              class="mb-2"
-            />
-            <CategoryFormView
-              v-model="formData"
-              :properties="categoryOnlyPropertiesFiltered"
-              :current-locale="locale"
-              delimiter=";"
-              :fetch-property-values-from-doc="fetchPropertyValuesFromDoc"
-              @submit="onSave"
-            />
+        <v-divider class="mb-3 flex-shrink-0" />
+        <v-tabs-window v-model="activeTab" class="edit-view-tabs-window">
+          <v-tabs-window-item value="properties" class="edit-view-tab-item">
+            <div class="edit-view-tab-scroll">
+              <v-checkbox
+                v-model="showMultivalueOnly"
+                :label="t(locale, 'showMultivalueOnly')"
+                hide-details
+                density="compact"
+                class="mb-2"
+              />
+              <CategoryFormView
+                v-model="formData"
+                :properties="categoryOnlyPropertiesFiltered"
+                :current-locale="locale"
+                delimiter=";"
+                :fetch-property-values-from-doc="fetchPropertyValuesFromDoc"
+                @submit="onSave"
+              />
+            </div>
           </v-tabs-window-item>
-          <v-tabs-window-item value="system">
-            <SystemPropertiesView :system-properties="systemPropertiesList" :current-locale="locale" />
+          <v-tabs-window-item value="system" class="edit-view-tab-item">
+            <div class="edit-view-tab-scroll">
+              <SystemPropertiesView :system-properties="systemPropertiesList" :current-locale="locale" />
+            </div>
           </v-tabs-window-item>
         </v-tabs-window>
       </template>
@@ -354,3 +358,52 @@ export default {
   }
 }
 </script>
+
+<style scoped>
+/* Fixed height: card fills container; only tab content (Standard / System properties) scrolls */
+.edit-view-card {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.edit-view-card-text {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.edit-view-tabs-window {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+/* Vuetify v-tabs-window: inner window uses absolute positioning; give it height so our scroll div works */
+.edit-view-tabs-window :deep(.v-window),
+.edit-view-tabs-window :deep(.v-window__container) {
+  height: 100%;
+}
+.edit-view-tab-item {
+  height: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.edit-view-tabs-window :deep(.v-window-item) {
+  height: 100%;
+  overflow: hidden;
+}
+.edit-view-tab-scroll {
+  overflow-y: auto;
+  overflow-x: hidden;
+  flex: 1;
+  min-height: 0;
+  /* Fallback so this area scrolls even if flex parent height isn't set (e.g. Vuetify absolute positioning) */
+  max-height: calc(100vh - 220px);
+  padding-bottom: 1rem;
+}
+</style>
