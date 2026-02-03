@@ -56,11 +56,15 @@ Output in `dist/` (SPA: index.html + hashed assets).
 npm run build:bundle
 ```
 
-Produces `dist/assets/vue-app.js` (fixed name). Use this URL in the host’s `sections-vue/config.js`:
+Produces `dist/assets/vue-app.js` (fixed name). Use this URL in the host’s `sections-vue/loader.js`:
 
 `https://septimiu-bitea.github.io/cloud-edit-form/assets/vue-app.js`
 
-The GitHub Actions workflow runs both builds and deploys; the site and `vue-app.js` are both available.
+**If that URL returns 404**, fix deployment:
+
+1. **Pages source** – In the repo (e.g. `cloud-edit-form`): **Settings → Pages**. Set **Source** to **GitHub Actions** (not “Deploy from a branch”). With “Deploy from a branch” the workflow artifact is not used and `assets/vue-app.js` won’t exist.
+2. **Run the workflow** – Push to `main` or run “Deploy to GitHub Pages” manually in the Actions tab. Wait for it to finish.
+3. **Check** – Open `https://<user>.github.io/<repo>/assets/vue-app.js`; you should see JavaScript, not a 404 page.
 
 ## Use with the ECM host
 
