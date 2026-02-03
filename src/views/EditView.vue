@@ -69,11 +69,14 @@ import {
   toMetaIndex,
   makePrevMap,
   collectSourceProperties,
+  buildValidationPayload,
+  buildSourcePropertiesFromValidationResponse,
+  extractValuesFromValidationResponse,
   buildO2mPayload,
   putO2mUpdate
 } from '@/services/submission'
 import { resolveDocIdFromProcess } from '@/utils/docId'
-import { mapIdtoUniqueId } from '@/utils/idMapping'
+import { mapIdtoUniqueId, getNumericIdFromUuid } from '@/utils/idMapping'
 import { categoryOnlyProperties as filterCategoryOnly } from '@/utils/systemProperties'
 import { buildO2ValueIndex, buildInitialValuesFromIndex, extractValuesForUuidFromO2 } from '@/utils/valueExtraction'
 import { t } from '@/utils/i18n'
@@ -81,8 +84,8 @@ import { t } from '@/utils/i18n'
 export default {
   name: 'EditView',
   components: { CategoryFormView, SystemPropertiesView },
-  inject: {
-    formInitContext: { default: null }
+  props: {
+    formInitContext: { type: Object, default: null }
   },
   data () {
     return {
@@ -151,8 +154,8 @@ export default {
     this.error = null
     try {
       const apiKey = import.meta.env.VITE_API_KEY || undefined
-      const Dv = createApi({ base: this.base, locale: this.locale, apiKey })
-      this.repoId = usedRepoId(this.base)
+      const Dv = createApi({ base: this.base, locale: this.locale, apiKey, onPremise: this.formInitContext?.onPremise })
+      this.repoId = (this.formInitContext && this.formInitContext.repoId) || usedRepoId(this.base)
       if (!this.repoId) {
         this.error = this.t(this.locale, 'errorNoRepo')
         return
@@ -232,16 +235,88 @@ export default {
           this.snackbar = { show: true, text: this.t(this.locale, 'noChangesToSave'), color: 'info' }
           return
         }
-        const payload = buildO2mPayload({
-          sourceProperties: { properties }
+
+        const apiKey = import.meta.env.VITE_API_KEY || undefined
+        const Dv = createApi({
+          base: this.base,
+          locale: this.locale,
+          apiKey,
+          onPremise: this.formInitContext?.onPremise
         })
+        const formLike = {
+          submission: { data: this.formData },
+          _o2mPrev: this.o2mPrev,
+          _o2Response: this.o2Response,
+          _srmItem: this.srmItem
+        }
+        const numericCatId = getNumericIdFromUuid(this.idMap, this.categoryId) || this.categoryId
+        const validationPayload = buildValidationPayload({
+          base: this.base,
+          repoId: this.repoId,
+          documentId: this.docId,
+          objectDefinitionId: numericCatId,
+          categoryId: this.categoryId,
+          form: formLike,
+          metaIdx: this.metaIdx,
+          catPropsArr: this.categoryProperties,
+          idMap: this.idMap,
+          o2Response: this.o2Response,
+          srmItem: this.srmItem,
+          displayValue: '',
+          filename: ''
+        })
+
+        const validationResult = await Dv.validateUpdate(
+          this.base,
+          this.repoId,
+          this.docId,
+          validationPayload
+        )
+
+        if (!validationResult.ok) {
+          const errorData = validationResult.json || {}
+          let errorMsg = errorData.reason
+            ? (errorData.errorCode ? `[${errorData.errorCode}] ${errorData.reason}` : errorData.reason)
+            : (errorData.message || errorData.error || this.t(this.locale, 'saveFailedWithStatus', validationResult.status))
+          if (validationResult.status === 409 || validationResult.status === 412) {
+            errorMsg = this.t(this.locale, 'documentEditedByAnotherUser') || 'Document is being edited by another user. Please refresh and try again.'
+          }
+          this.snackbar = { show: true, text: errorMsg, color: 'error' }
+          return
+        }
+
+        const validationResponse = validationResult.json
+        const validatedValues = extractValuesFromValidationResponse(validationResponse, {
+          idMap: this.idMap,
+          catPropsArr: this.categoryProperties,
+          originalValues: this.o2mPrev
+        })
+        if (Object.keys(validatedValues).length > 0) {
+          this.formData = { ...this.formData, ...validatedValues }
+          for (const [uuid, value] of Object.entries(validatedValues)) {
+            const meta = this.metaIdx?.get?.(uuid)
+            if (meta?.isMulti) {
+              this.o2mPrev[uuid] = Array.isArray(value) ? value : (value != null ? [value] : [])
+            } else {
+              this.o2mPrev[uuid] = value != null ? String(value) : ''
+            }
+          }
+        }
+
+        const sourceProperties = buildSourcePropertiesFromValidationResponse(validationResponse, {
+          idMap: this.idMap,
+          catPropsArr: this.categoryProperties,
+          metaIdx: this.metaIdx
+        })
+        const payload = buildO2mPayload({ sourceProperties })
         const result = await putO2mUpdate({
           base: this.base,
           repoId: this.repoId,
           dmsObjectId: this.docId,
           payload,
-          apiKey: import.meta.env.VITE_API_KEY || undefined
+          apiKey
         })
+
         if (result.ok) {
           this.o2mPrev = makePrevMap(
             this.o2Response,
@@ -270,7 +345,7 @@ export default {
     async fetchPropertyValuesFromDoc (docId, propertyId) {
       if (!docId || !propertyId || !this.base || !this.repoId) return []
       const apiKey = import.meta.env.VITE_API_KEY || undefined
-      const Dv = createApi({ base: this.base, locale: this.locale, apiKey })
+      const Dv = createApi({ base: this.base, locale: this.locale, apiKey, onPremise: this.formInitContext?.onPremise })
       const o2Resp = await Dv.o2(this.base, this.repoId, docId)
       if (!o2Resp?.id) throw new Error('Document not found.')
       const values = extractValuesForUuidFromO2(o2Resp, propertyId, this.idMap || {}, { isMulti: true, dataType: 'STRING' })

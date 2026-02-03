@@ -123,6 +123,254 @@ export function collectSourceProperties (formData = {}, prevMap = {}, metaIdx) {
   return { properties }
 }
 
+const VALIDATION_SEP_RE = /[;,|]/
+
+/**
+ * Build validation payload for POST /o2/{documentId}/update/validate.
+ * form: { submission: { data }, _o2mPrev }; o2Response/srmItem can be passed separately.
+ */
+export function buildValidationPayload ({
+  base,
+  repoId,
+  documentId,
+  objectDefinitionId,
+  categoryId,
+  form,
+  metaIdx,
+  catPropsArr,
+  idMap,
+  o2Response,
+  srmItem,
+  displayValue,
+  filename
+} = {}) {
+  const numericCatId = objectDefinitionId || getNumericIdFromUuid(idMap, categoryId) || categoryId
+
+  const systemProperties = {}
+  if (srmItem) {
+    const srmIdx = buildSrmValueIndex(srmItem)
+    const sysProps = ['property_document_number', 'property_variant_number', 'property_colorcode']
+    sysProps.forEach(key => {
+      const val = srmIdx[key]
+      if (val != null) systemProperties[key] = val
+    })
+  }
+
+  const formData = (form?.submission?.data) ? form.submission.data : {}
+  const extendedProperties = {}
+  const multivalueExtendedProperties = {}
+  const prevMap = form?._o2mPrev || {}
+
+  const norm = (v, dt) => (coerceValueForType(v, dt) == null ? '' : String(coerceValueForType(v, dt))).trim()
+  const normalizeMulti = (raw, dt) => {
+    let arr
+    if (Array.isArray(raw)) arr = raw.slice()
+    else if (raw == null || raw === '') arr = []
+    else if (typeof raw === 'string' && VALIDATION_SEP_RE.test(raw)) arr = raw.split(VALIDATION_SEP_RE).map(s => s.trim())
+    else arr = [raw]
+    return arr.map(v => norm(v, dt)).filter(v => v !== '')
+  }
+
+  const propsToProcess = catPropsArr?.length
+    ? catPropsArr
+    : Array.from(metaIdx?.entries() ?? []).map(([uuid, meta]) => ({
+        id: uuid,
+        isMultiValue: meta.isMulti,
+        dataType: meta.dataType,
+        readOnly: meta.readOnly
+      }))
+
+  for (const prop of propsToProcess) {
+    const uuid = String(prop?.id ?? '')
+    if (!uuid) continue
+    const meta = metaIdx?.get?.(uuid) || {
+      uuid,
+      numericId: getNumericIdFromUuid(idMap, uuid),
+      dataType: String(prop?.dataType || 'STRING').toUpperCase(),
+      isMulti: !!prop?.isMultiValue,
+      readOnly: !!prop?.isSystemProperty || !!prop?.readOnly
+    }
+    if (meta.readOnly) continue
+    const numericId = meta.numericId || getNumericIdFromUuid(idMap, uuid)
+    if (!numericId) continue
+    const dt = meta.dataType
+    const raw = formData[uuid]
+
+    if (meta.isMulti) {
+      const curr = normalizeMulti(raw, dt)
+      const prevArr = Array.isArray(prevMap[uuid])
+        ? prevMap[uuid].map(v => norm(v, dt)).filter(v => v !== '')
+        : []
+      const valuesObj = {}
+      const remaining = curr.slice()
+      const slots = prevArr.map(prevVal => {
+        const matchIdx = remaining.findIndex(c => c === prevVal)
+        if (matchIdx !== -1) {
+          const matched = remaining[matchIdx]
+          remaining.splice(matchIdx, 1)
+          return matched
+        }
+        return null
+      })
+      for (let i = 0; i < slots.length; i++) {
+        if (slots[i] === null && remaining.length > 0) slots[i] = remaining.shift()
+      }
+      slots.forEach((val, idx) => {
+        valuesObj[String(idx + 1)] = val != null ? val : ''
+      })
+      let slotIndex = slots.length + 1
+      remaining.forEach(val => {
+        valuesObj[String(slotIndex)] = val
+        slotIndex++
+      })
+      if (Object.keys(valuesObj).length === 0) valuesObj['1'] = ''
+      multivalueExtendedProperties[numericId] = valuesObj
+    } else {
+      const currVal = raw != null ? norm(raw, dt) : (prevMap[uuid] != null ? norm(prevMap[uuid], dt) : '')
+      extendedProperties[numericId] = currVal
+    }
+  }
+
+  let eTag = null
+  let lockTokenUrl = null
+  if (o2Response) {
+    if (o2Response.storeObject) {
+      eTag = o2Response.storeObject.eTag
+      lockTokenUrl = o2Response.storeObject.lockTokenUrl
+    }
+    if (!lockTokenUrl && o2Response._links?.locktoken?.href) {
+      lockTokenUrl = o2Response._links.locktoken.href
+    }
+  }
+
+  const storeObject = {
+    displayValue: displayValue || '',
+    filename: filename || '',
+    dmsObjectId: documentId,
+    dmsobject: {
+      href: repoId ? `/dms/r/${encodeURIComponent(repoId)}/o2/${encodeURIComponent(documentId)}` : '',
+      id: documentId
+    },
+    doMapping: false,
+    isInUpdateMode: true,
+    doValidate: false,
+    fileSelect: false,
+    id: 0,
+    _links: {},
+    _embedded: {}
+  }
+  if (eTag) storeObject.eTag = eTag
+  if (lockTokenUrl) storeObject.lockTokenUrl = lockTokenUrl
+
+  return {
+    type: 1,
+    objectDefinitionId: String(numericCatId),
+    systemProperties,
+    remarks: {},
+    multivalueExtendedProperties,
+    extendedProperties,
+    docNumber: documentId,
+    id: documentId,
+    storeObject
+  }
+}
+
+/**
+ * Extract UUID-keyed values from validation response (for updating form state).
+ */
+export function extractValuesFromValidationResponse (validationResponse, { idMap, catPropsArr, originalValues } = {}) {
+  if (!validationResponse || typeof validationResponse !== 'object') return {}
+  const values = {}
+  const extendedProps = validationResponse.extendedProperties || {}
+  const multivalueProps = validationResponse.multivalueExtendedProperties || {}
+  const numericToUuid = {}
+  if (idMap && typeof idMap === 'object') {
+    for (const [numericId, uuid] of Object.entries(idMap)) {
+      numericToUuid[numericId] = uuid
+    }
+  }
+  if (catPropsArr?.length) {
+    for (const prop of catPropsArr) {
+      const uuid = String(prop?.id ?? '')
+      const numericId = getNumericIdFromUuid(idMap, uuid)
+      if (numericId && uuid) numericToUuid[String(numericId)] = uuid
+    }
+  }
+  for (const [numericId, value] of Object.entries(extendedProps)) {
+    const uuid = numericToUuid[numericId]
+    if (uuid && multivalueProps?.[numericId]) continue
+    let coercedValue = value
+    if (catPropsArr?.length) {
+      const prop = catPropsArr.find(p => String(p?.id) === uuid)
+      if (prop) {
+        const dataType = String(prop?.dataType || 'STRING').toUpperCase()
+        coercedValue = coerceValueForType(value, dataType)
+      }
+    }
+    if (uuid) values[uuid] = coercedValue
+  }
+  for (const [numericId, valuesObj] of Object.entries(multivalueProps)) {
+    const uuid = numericToUuid[numericId]
+    if (!uuid || !valuesObj || typeof valuesObj !== 'object') continue
+    const arr = Object.keys(valuesObj)
+      .sort((a, b) => Number(a) - Number(b))
+      .map(key => (valuesObj[key] != null ? String(valuesObj[key]) : ''))
+    if (catPropsArr?.length) {
+      const prop = catPropsArr.find(p => String(p?.id) === uuid)
+      if (prop) {
+        const dataType = String(prop?.dataType || 'STRING').toUpperCase()
+        values[uuid] = arr.map(v => (v === '' || v == null ? '' : coerceValueForType(v, dataType)))
+      } else {
+        values[uuid] = arr
+      }
+    } else {
+      values[uuid] = arr
+    }
+  }
+  return values
+}
+
+/**
+ * Build sourceProperties for O2m payload from validation response.
+ */
+export function buildSourcePropertiesFromValidationResponse (validationResponse, { idMap, catPropsArr, metaIdx } = {}) {
+  if (!validationResponse || typeof validationResponse !== 'object') return { properties: [] }
+  const properties = []
+  const extendedProps = validationResponse.extendedProperties || {}
+  const multivalueProps = validationResponse.multivalueExtendedProperties || {}
+  const numericToUuid = {}
+  if (idMap && typeof idMap === 'object') {
+    for (const [numericId, uuid] of Object.entries(idMap)) {
+      numericToUuid[numericId] = uuid
+    }
+  }
+  if (catPropsArr?.length) {
+    for (const prop of catPropsArr) {
+      const uuid = String(prop?.id ?? '')
+      const numericId = getNumericIdFromUuid(idMap, uuid)
+      if (numericId && uuid) numericToUuid[String(numericId)] = uuid
+    }
+  }
+  for (const [numericId, value] of Object.entries(extendedProps)) {
+    const uuid = numericToUuid[numericId]
+    if (!uuid || multivalueProps[numericId]) continue
+    const coercedValue = value != null ? String(value) : ''
+    if (coercedValue !== '' || (metaIdx?.get?.(uuid) && !metaIdx.get(uuid).readOnly)) {
+      properties.push({ key: uuid, values: [coercedValue] })
+    }
+  }
+  for (const [numericId, valuesObj] of Object.entries(multivalueProps)) {
+    const uuid = numericToUuid[numericId]
+    if (!uuid || !valuesObj || typeof valuesObj !== 'object') continue
+    const arr = Object.keys(valuesObj)
+      .sort((a, b) => Number(a) - Number(b))
+      .map(key => (valuesObj[key] != null ? String(valuesObj[key]) : ''))
+    if (arr.length === 0) continue
+    properties.push({ key: uuid, values: arr })
+  }
+  return { properties }
+}
+
 /**
  * Build O2m update payload body.
  */

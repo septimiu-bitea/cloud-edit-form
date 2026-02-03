@@ -1,6 +1,8 @@
 /**
- * App config (mirrors section 1). Can be overridden by env or window.
+ * App config (mirrors section 1). When loaded by the host, __formInitContext.onPremise / .repoId override.
  */
 export const DEBUG = import.meta.env?.DEV ?? false
-export const ON_PREMISE = import.meta.env?.VITE_ON_PREMISE === 'true' ?? false
-export const REPO_ID = import.meta.env?.VITE_REPO_ID ?? null
+export const ON_PREMISE = (typeof window !== 'undefined' && window.__formInitContext?.onPremise === true) ||
+  (import.meta.env?.VITE_ON_PREMISE === 'true') || false
+export const REPO_ID = ((typeof window !== 'undefined' && window.__formInitContext?.repoId) ||
+  import.meta.env?.VITE_REPO_ID) ?? null

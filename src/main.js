@@ -19,6 +19,7 @@ if (!context && import.meta.env.DEV && baseUrl) {
     data: docId ? { docId } : {},
     mountEl: null
   }
+  if (typeof window !== 'undefined') window.__formInitContext = context
   if (typeof console !== 'undefined') console.log('[vue-app] Mock context from .env.local (base, docId):', context.base, '->', baseUrl, context.data.docId || '(none)')
 } else if (!context && import.meta.env.DEV && typeof console !== 'undefined') {
   console.log('[vue-app] Standalone: no mock context. Set VITE_BASE_URL in vue-app/.env.local and restart: npm run dev')
@@ -38,9 +39,5 @@ if (context && context.mountEl && context.mountEl instanceof Node) {
 
 const app = createApp(App)
 app.use(vuetify)
-
-if (context) {
-  app.provide('formInitContext', context)
-}
-
+// Context is owned by App via data(); no provide here so we don't rely on plain JS in components.
 app.mount(mountTarget)
