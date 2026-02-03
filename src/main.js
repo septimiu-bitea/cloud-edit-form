@@ -39,5 +39,7 @@ if (context && context.mountEl && context.mountEl instanceof Node) {
 
 const app = createApp(App)
 app.use(vuetify)
-// Context is owned by App via data(); no provide here so we don't rely on plain JS in components.
+if (context) {
+  app.provide('formInitContext', context)
+}
 app.mount(mountTarget)

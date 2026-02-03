@@ -1,0 +1,4 @@
+# Allow cross-origin embedding (fixes OpaqueResponseBlocking when host uses COEP).
+# Used by Cloudflare Pages / Netlify. GitHub Pages ignores this file.
+/assets/*
+  Cross-Origin-Resource-Policy: cross-origin

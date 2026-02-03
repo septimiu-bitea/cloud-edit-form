@@ -84,8 +84,8 @@ import { t } from '@/utils/i18n'
 export default {
   name: 'EditView',
   components: { CategoryFormView, SystemPropertiesView },
-  props: {
-    formInitContext: { type: Object, default: null }
+  inject: {
+    formInitContext: { default: null }
   },
   data () {
     return {
