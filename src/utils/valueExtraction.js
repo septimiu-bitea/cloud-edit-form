@@ -129,7 +129,32 @@ export function buildO2ValueIndex (o2json, idMap = {}) {
   return idx
 }
 
-export function buildInitialValuesFromIndex (catProps = [], { o2Index = null, srmItem = null, idMap = {} } = {}) {
+/**
+ * Build a value index from the host's data.dmsProperties (e.g. from form submission).
+ * Used when the backend sends property values keyed by numeric id and property_* names.
+ * Keys in index: id, property_<id>, and idMap[id] (uuid) when idMap is provided.
+ */
+export function buildIndexFromDmsProperties (dmsProperties = {}, idMap = {}) {
+  const idx = Object.create(null)
+  if (!dmsProperties || typeof dmsProperties !== 'object') return idx
+  for (const [k, v] of Object.entries(dmsProperties)) {
+    const key = String(k ?? '').trim()
+    if (!key) continue
+    let value = v
+    if (Array.isArray(value)) {
+      value = value.filter(x => x != null && String(x).trim() !== '')
+    } else if (value == null || value === '') {
+      value = null
+    }
+    if (value == null && !Array.isArray(v)) continue
+    idx[key] = value
+    idx['property_' + key] = value
+    if (idMap[key]) idx[idMap[key]] = value
+  }
+  return idx
+}
+
+export function buildInitialValuesFromIndex (catProps = [], { o2Index = null, srmItem = null, idMap = {}, dmsIndex = null } = {}) {
   const srmIdx = buildSrmValueIndex(srmItem)
 
   const getBy = (index, key) => {
@@ -155,9 +180,10 @@ export function buildInitialValuesFromIndex (catProps = [], { o2Index = null, sr
     const dataType = String(prop?.dataType || 'STRING').toUpperCase()
     const coerce = (v) => coerceValueForType(v, dataType)
 
+    // Prefer host data (dmsProperties) when present, then O2, then SRM
     let val = isMulti
-      ? (getBy(o2Index, uuid) ?? getBy(srmIdx, uuid))
-      : (getBy(srmIdx, uuid) ?? getBy(o2Index, uuid))
+      ? (getBy(dmsIndex, uuid) ?? getBy(o2Index, uuid) ?? getBy(srmIdx, uuid))
+      : (getBy(dmsIndex, uuid) ?? getBy(srmIdx, uuid) ?? getBy(o2Index, uuid))
 
     if (isMulti) {
       if (Array.isArray(val)) {

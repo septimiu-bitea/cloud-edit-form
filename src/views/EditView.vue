@@ -82,7 +82,7 @@ import {
 import { resolveDocIdFromProcess } from '@/utils/docId'
 import { mapIdtoUniqueId, getNumericIdFromUuid } from '@/utils/idMapping'
 import { categoryOnlyProperties as filterCategoryOnly } from '@/utils/systemProperties'
-import { buildO2ValueIndex, buildInitialValuesFromIndex, extractValuesForUuidFromO2 } from '@/utils/valueExtraction'
+import { buildO2ValueIndex, buildIndexFromDmsProperties, buildInitialValuesFromIndex, extractValuesForUuidFromO2 } from '@/utils/valueExtraction'
 import { t } from '@/utils/i18n'
 
 export default {
@@ -198,10 +198,14 @@ export default {
       this.idMap = idToUniqueId || {}
 
       const o2Index = buildO2ValueIndex(o2Resp, this.idMap)
+      // Host may pass data.dmsProperties (e.g. from backend); use it so standard properties populate on-prem
+      const dmsProps = this.formInitContext?.data?.dmsProperties ?? this.formInitContext?.data?.data?.dmsProperties
+      const dmsIndex = buildIndexFromDmsProperties(dmsProps, this.idMap)
       this.initialValues = buildInitialValuesFromIndex(catP.arr, {
         o2Index,
         srmItem: firstItem,
-        idMap: this.idMap
+        idMap: this.idMap,
+        dmsIndex: Object.keys(dmsIndex).length ? dmsIndex : null
       })
       this.categoryProperties = catP.arr || []
       this.o2Response = o2Resp
