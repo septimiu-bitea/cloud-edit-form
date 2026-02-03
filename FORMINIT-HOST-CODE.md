@@ -4,7 +4,7 @@ Use the **Vue loader** alternative sections: `sections-vue/`. They forward conte
 
 ## 1. Configure and load the Vue loader
 
-Edit the config at the top of **`sections-vue/loader.js`** (BUNDLE_URL, BUNDLE_MOUNT_SELECTOR, ON_PREMISE, REPO_ID), then load **loader.js** on the host page **after** the main app.
+Edit the config at the top of **`sections-vue/loading.js`** (BUNDLE_URL, BUNDLE_MOUNT_SELECTOR, ON_PREMISE, REPO_ID), then load **loading.js** on the host page **after** the main app. This is the standard loader—use it always.
 
 If the host uses **Cross-Origin-Embedder-Policy** (COEP), loading from GitHub Pages can be blocked. Then either proxy the script from the host (same-origin URL) or use a host that sends CORP. See **sections-vue/README.md** → “OpaqueResponseBlocking”.
 

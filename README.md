@@ -56,7 +56,7 @@ Output in `dist/` (SPA: index.html + hashed assets).
 npm run build:bundle
 ```
 
-Produces `dist/assets/vue-app.js` (fixed name). Use this URL in the host’s `sections-vue/loader.js`:
+Produces `dist/assets/vue-app.js` (fixed name). Use this URL in the host’s `sections-vue/loading.js`:
 
 `https://septimiu-bitea.github.io/cloud-edit-form/assets/vue-app.js`
 
