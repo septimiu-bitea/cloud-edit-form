@@ -123,6 +123,13 @@
       <label for="categoryId">Category ID (optional - will be auto-detected):</label>
       <input type="text" id="categoryId" placeholder="afab2739-e5c6-4db3-961c-57de3d29dd76" value="afab2739-e5c6-4db3-961c-57de3d29dd76">
       
+      <label for="onPremise">On-Premise Mode:</label>
+      <select id="onPremise" style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; box-sizing: border-box; margin-bottom: 12px;">
+        <option value="">Test Both (default)</option>
+        <option value="true">On-Premise Only</option>
+        <option value="false">Cloud Only</option>
+      </select>
+      
       <label>
         <input type="checkbox" id="skipApiCalls" style="width: auto; margin-right: 8px;">
         Skip API calls (use mock data only)
@@ -188,12 +195,14 @@
     async function loadTests() {
       try {
         // Set up test config from form
+        const onPremiseValue = document.getElementById('onPremise').value
         window.TEST_CONFIG = {
           baseUrl: document.getElementById('baseUrl').value || import.meta.env.VITE_BASE_URL || '',
           apiKey: document.getElementById('apiKey').value || import.meta.env.VITE_API_KEY || null,
           repoId: document.getElementById('repoId').value || import.meta.env.VITE_REPO_ID || null,
           documentId: document.getElementById('documentId').value || import.meta.env.VITE_DOCUMENT_ID || 'MW00000001',
           categoryId: document.getElementById('categoryId').value || import.meta.env.VITE_CATEGORY_ID || null,
+          onPremise: onPremiseValue === '' ? null : (onPremiseValue === 'true'),
           skipApiCalls: document.getElementById('skipApiCalls').checked
         }
         
@@ -225,6 +234,9 @@
         }
         if (config.categoryId) {
           document.getElementById('categoryId').value = config.categoryId
+        }
+        if (config.onPremise !== undefined && config.onPremise !== null) {
+          document.getElementById('onPremise').value = String(config.onPremise)
         }
         if (config.skipApiCalls !== undefined) {
           document.getElementById('skipApiCalls').checked = config.skipApiCalls

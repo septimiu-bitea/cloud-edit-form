@@ -22,13 +22,14 @@ async function loadTestConfig() {
     if (typeof window !== 'undefined' && window.TEST_CONFIG) {
       return window.TEST_CONFIG
     }
+    const env = (typeof import.meta !== 'undefined' && import.meta.env) ? import.meta.env : {}
     return {
-      baseUrl: import.meta.env.VITE_BASE_URL || (typeof window !== 'undefined' ? window.TEST_BASE_URL : null) || '',
-      apiKey: import.meta.env.VITE_API_KEY || (typeof window !== 'undefined' ? window.TEST_API_KEY : null) || null,
-      repoId: import.meta.env.VITE_REPO_ID || (typeof window !== 'undefined' ? window.TEST_REPO_ID : null) || null,
-      documentId: import.meta.env.VITE_DOCUMENT_ID || (typeof window !== 'undefined' ? window.TEST_DOCUMENT_ID : null) || 'MW00000001',
-      categoryId: import.meta.env.VITE_CATEGORY_ID || (typeof window !== 'undefined' ? window.TEST_CATEGORY_ID : null) || null,
-      skipApiCalls: import.meta.env.SKIP_API_CALLS === 'true' || (typeof window !== 'undefined' ? window.SKIP_API_CALLS : false) || false
+      baseUrl: env.VITE_BASE_URL || process.env.VITE_BASE_URL || (typeof window !== 'undefined' ? window.TEST_BASE_URL : null) || '',
+      apiKey: env.VITE_API_KEY || process.env.VITE_API_KEY || (typeof window !== 'undefined' ? window.TEST_API_KEY : null) || null,
+      repoId: env.VITE_REPO_ID || process.env.VITE_REPO_ID || (typeof window !== 'undefined' ? window.TEST_REPO_ID : null) || null,
+      documentId: env.VITE_DOCUMENT_ID || process.env.VITE_DOCUMENT_ID || (typeof window !== 'undefined' ? window.TEST_DOCUMENT_ID : null) || 'MW00000001',
+      categoryId: env.VITE_CATEGORY_ID || process.env.VITE_CATEGORY_ID || (typeof window !== 'undefined' ? window.TEST_CATEGORY_ID : null) || null,
+      skipApiCalls: (env.SKIP_API_CALLS === 'true' || process.env.SKIP_API_CALLS === 'true') || (typeof window !== 'undefined' ? window.SKIP_API_CALLS : false) || false
     }
   }
 }
@@ -101,6 +102,20 @@ async function runTests() {
     documentId: TEST_CONFIG.documentId,
     skipApiCalls: TEST_CONFIG.skipApiCalls
   })
+
+  // Integration tests - run based on TEST_CONFIG.onPremise
+  // If onPremise is null/undefined, test both; otherwise test only the specified mode
+  if (TEST_CONFIG.onPremise === true || TEST_CONFIG.onPremise === null || TEST_CONFIG.onPremise === undefined) {
+    test('Integration: Fetch real API data and test dmsProperties population (onPremise: true)', async () => {
+      return await runIntegrationTest(true)
+    })
+  }
+
+  if (TEST_CONFIG.onPremise === false || TEST_CONFIG.onPremise === null || TEST_CONFIG.onPremise === undefined) {
+    test('Integration: Fetch real API data and test dmsProperties population (onPremise: false)', async () => {
+      return await runIntegrationTest(false)
+    })
+  }
 
   for (const { name, fn } of tests) {
     try {
@@ -180,6 +195,29 @@ test('buildIndexFromDmsProperties: Filters null/empty values from arrays', () =>
   assert(index['123'].length === 2, 'Should filter null/empty values')
   assert(index['123'][0] === 'value1', 'Should preserve valid values')
   assert(index['123'][1] === 'value2', 'Should preserve other valid values')
+})
+
+test('buildIndexFromDmsProperties: Converts slot maps to arrays (on-premise multivalue format)', () => {
+  const dmsProps = {
+    '123': { '0': 'value1', '1': 'value2', '2': 'value3' },
+    '456': { '0': 'single' }
+  }
+  const index = buildIndexFromDmsProperties(dmsProps, {})
+  
+  assert(Array.isArray(index['123']), 'Should convert slot map to array')
+  assert(index['123'].length === 3, 'Should preserve all slot values')
+  assert(index['123'][0] === 'value1', 'Should preserve slot order')
+  assert(index['123'][1] === 'value2', 'Should preserve other values')
+  assert(index['123'][2] === 'value3', 'Should preserve third value')
+  
+  assert(Array.isArray(index['456']), 'Single-value slot map should become array')
+  assert(index['456'].length === 1, 'Should have one value')
+  assert(index['456'][0] === 'single', 'Should preserve value')
+  
+  console.log('  📝 Slot map conversion:', {
+    '123': index['123'],
+    '456': index['456']
+  })
 })
 
 test('buildInitialValuesFromIndex: Populates values from dmsIndex with UUID property IDs', () => {
@@ -560,14 +598,6 @@ async function runIntegrationTest(onPremise) {
   }
 }
 
-test('Integration: Fetch real API data and test dmsProperties population (onPremise: true)', async () => {
-  return await runIntegrationTest(true)
-})
-
-test('Integration: Fetch real API data and test dmsProperties population (onPremise: false)', async () => {
-  return await runIntegrationTest(false)
-})
-
 // Export for use in browser console or test runner
 if (typeof window !== 'undefined') {
   window.runDmsPropertiesTests = async () => {
@@ -579,7 +609,7 @@ if (typeof window !== 'undefined') {
 }
 
 // Auto-run if executed directly (Node.js only)
-if (typeof process !== 'undefined' && process.argv && import.meta.url === `file://${process.argv[1]}`) {
+if (typeof window === 'undefined' && typeof process !== 'undefined') {
   runTests().catch(console.error)
 }
 

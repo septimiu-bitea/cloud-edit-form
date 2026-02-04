@@ -9,13 +9,13 @@
           <template v-if="values.length > 0">
             <v-chip
               v-for="(item, idx) in values"
-              :key="`chip-${idx}`"
+              :key="`chip-${idx}-${String(item)}`"
               size="small"
               variant="tonal"
               closable
-              :disabled="readonly"
+              :disabled="readonly || removingValue !== null"
               class="ma-1"
-              @click:close="removeAt(idx)"
+              @click:close="(e) => handleRemove(e, item, idx)"
             >
               {{ item }}
             </v-chip>
@@ -60,13 +60,13 @@
             <v-icon start size="small">mdi-content-paste</v-icon>
             {{ t(currentLocale, 'paste') }}
           </v-btn>
-          <v-btn
-            size="small"
-            variant="outlined"
-            color="error"
-            :disabled="values.length === 0"
-            @click="onClear"
-          >
+            <v-btn
+              size="small"
+              variant="outlined"
+              color="error"
+              :disabled="values.length === 0"
+              @click="onClear"
+            >
             <v-icon start size="small">mdi-delete-sweep</v-icon>
             {{ t(currentLocale, 'clear') }}
           </v-btn>
@@ -113,6 +113,8 @@
 
 <script>
 import { t } from '@/utils/i18n'
+import { log, warn } from '@/utils/debug'
+import { parseInputLine, parsePasteText } from '@/utils/multivalueParsing'
 
 /**
  * Normalize modelValue to an array of strings (handles array or single value).
@@ -121,49 +123,6 @@ function toValues (modelValue) {
   if (Array.isArray(modelValue)) return modelValue.map(v => String(v ?? ''))
   if (modelValue != null && modelValue !== '') return [String(modelValue)]
   return []
-}
-
-/**
- * Build regex to split by delimiter (escape special chars).
- */
-function splitRegexFor (delimiter) {
-  if (!delimiter || typeof delimiter !== 'string') return /;/
-  const escaped = delimiter.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  return new RegExp(escaped)
-}
-
-/**
- * Parse single-line input: quoted "a;b" → one value, else split by delimiter.
- */
-function parseInputLine (line, delimiter) {
-  const trimmed = (line ?? '').trim()
-  if (!trimmed) return []
-  if (/^".*"$/.test(trimmed)) {
-    return [trimmed.slice(1, -1)]
-  }
-  const re = splitRegexFor(delimiter)
-  return trimmed.split(re).map(t => t.trim().replace(/^"(.*)"$/, '$1')).filter(Boolean)
-}
-
-/**
- * Parse pasted text: newlines first, then delimiter per line; trim and unquote.
- */
-function parsePasteText (text, delimiter) {
-  if (!text || typeof text !== 'string') return []
-  const normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
-  const re = splitRegexFor(delimiter)
-  const lines = normalized.includes('\n') ? normalized.split('\n') : [normalized]
-  const tokens = []
-  for (const line of lines) {
-    const t = line.trim()
-    if (!t) continue
-    if (t.startsWith('"') && t.endsWith('"')) {
-      tokens.push(t.slice(1, -1))
-    } else {
-      tokens.push(...t.split(re).map(s => s.trim().replace(/^"(.*)"$/, '$1')).filter(Boolean))
-    }
-  }
-  return tokens
 }
 
 export default {
@@ -202,6 +161,8 @@ export default {
       pendingInput: '',
       importDocId: '',
       importLoading: false,
+      removingValue: null, // Track which value is being removed to prevent double-clicks
+      removalTimestamp: null, // Track when removal started
       snackbar: {
         show: false,
         text: '',
@@ -226,13 +187,110 @@ export default {
   methods: {
     t,
     removeAt (index) {
-      const next = this.values.filter((_, i) => i !== index)
+      // Prevent concurrent removals
+      if (this.removingIndex !== null) {
+        warn(`[MultivalueField] removeAt: already removing index ${this.removingIndex}, ignoring request for index ${index}`)
+        return
+      }
+      
+      // Create a fresh copy to avoid reactivity issues
+      const current = [...this.values]
+      if (index < 0 || index >= current.length) {
+        warn(`[MultivalueField] removeAt: invalid index ${index}, array length ${current.length}`)
+        return
+      }
+      
+      // Set removing flag
+      this.removingIndex = index
+      
+      log(`[MultivalueField] removeAt(${index}): current=`, current, 'removing:', current[index])
+      const next = current.filter((_, i) => i !== index)
+      log(`[MultivalueField] removeAt(${index}): next=`, next)
+      
+      // Use nextTick to ensure the update happens after the current render cycle
+      this.$nextTick(() => {
+        this.$emit('update:modelValue', next)
+        // Clear removing flag after a short delay to allow Vue to re-render
+        setTimeout(() => {
+          this.removingIndex = null
+        }, 50)
+      })
+    },
+    handleRemove (event, valueToRemove, index) {
+      // Stop event propagation immediately
+      if (event) {
+        event.preventDefault()
+        event.stopPropagation()
+        event.stopImmediatePropagation()
+      }
+      
+      // Prevent concurrent removals - check both value and timestamp
+      const now = Date.now()
+      if (this.removingValue !== null) {
+        // If removal was recent (within 500ms), ignore this request
+        if (this.removalTimestamp && (now - this.removalTimestamp) < 500) {
+          warn(`[MultivalueField] handleRemove: already removing "${this.removingValue}", ignoring request for "${valueToRemove}" (${now - this.removalTimestamp}ms ago)`)
+          return
+        }
+        // If it's been a while, clear the flag (might be stale)
+        this.removingValue = null
+        this.removalTimestamp = null
+      }
+      
+      const current = [...this.values]
+      
+      // Validate index if provided, otherwise find by value
+      let targetIndex = index
+      if (targetIndex === undefined || targetIndex < 0 || targetIndex >= current.length) {
+        targetIndex = current.indexOf(valueToRemove)
+        if (targetIndex === -1) {
+          warn(`[MultivalueField] handleRemove: value not found:`, valueToRemove)
+          return
+        }
+      }
+      
+      // Verify the value at the index matches
+      if (current[targetIndex] !== valueToRemove) {
+        warn(`[MultivalueField] handleRemove: value mismatch at index ${targetIndex}: expected "${valueToRemove}", got "${current[targetIndex]}"`)
+        // Try to find by value instead
+        targetIndex = current.indexOf(valueToRemove)
+        if (targetIndex === -1) {
+          warn(`[MultivalueField] handleRemove: value not found after mismatch:`, valueToRemove)
+          return
+        }
+      }
+      
+      // Set removing flags
+      this.removingValue = valueToRemove
+      this.removalTimestamp = now
+      
+      log(`[MultivalueField] handleRemove("${valueToRemove}", idx=${targetIndex}): current=`, current)
+      const next = current.filter((v, i) => i !== targetIndex)
+      log(`[MultivalueField] handleRemove("${valueToRemove}"): next=`, next)
+      
+      // Emit immediately
       this.$emit('update:modelValue', next)
+      
+      // Clear removing flag after a delay to allow Vue to re-render
+      setTimeout(() => {
+        // Only clear if we're still removing the same value (not a new removal)
+        if (this.removingValue === valueToRemove) {
+          this.removingValue = null
+          this.removalTimestamp = null
+        }
+      }, 300)
+    },
+    removeValue (valueToRemove) {
+      // Legacy method - redirect to handleRemove
+      this.handleRemove(null, valueToRemove)
     },
     parseAndAdd (raw) {
+      console.log('[MultivalueField] parseAndAdd called with:', raw, 'delimiter:', this.delimiter)
       const tokens = parseInputLine(raw, this.delimiter)
+      console.log('[MultivalueField] parseInputLine returned tokens:', tokens)
       if (tokens.length === 0) return
-      const next = this.values.concat(tokens)
+      const next = [...this.values, ...tokens]
+      console.log('[MultivalueField] Emitting update with values:', next)
       this.$emit('update:modelValue', next)
     },
     commitAdd () {
@@ -252,7 +310,7 @@ export default {
           this.showSnackbar(this.t(this.currentLocale, 'noValuesInClipboard'), 'info')
           return
         }
-        const next = this.values.concat(tokens)
+        const next = [...this.values, ...tokens]
         this.$emit('update:modelValue', next)
         this.showSnackbar(this.t(this.currentLocale, 'pastedNValues', tokens.length), 'success')
       }).catch((err) => {

@@ -36,6 +36,9 @@ export default defineConfig(({ mode }) => {
         assetFileNames: 'assets/[name]-[hash][extname]',
       },
     },
+    // Copy scripts/loading.js to dist/scripts/loading.js
+    copyPublicDir: true,
   },
+  publicDir: 'scripts',
   }
 })

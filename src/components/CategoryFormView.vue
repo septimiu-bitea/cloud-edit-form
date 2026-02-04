@@ -100,6 +100,10 @@ export default {
       type: Array,
       default: () => []
     },
+    idMap: {
+      type: Object,
+      default: () => ({})
+    },
     currentLocale: {
       type: String,
       default: 'en'
@@ -128,14 +132,21 @@ export default {
     fieldType (prop) {
       return fieldTypeForDataType(prop.dataType, { isMulti: !!prop.isMultiValue })
     },
-    currentValue (uuid) {
+    // Resolve UUID from prop.id (handles numeric IDs in on-premise mode)
+    resolveUuid (propId) {
+      return this.idMap[propId] || propId
+    },
+    currentValue (propId) {
+      const uuid = this.resolveUuid(propId)
       return this.modelValue[uuid] ?? ''
     },
-    multiValues (uuid) {
+    multiValues (propId) {
+      const uuid = this.resolveUuid(propId)
       const v = this.modelValue[uuid]
       return Array.isArray(v) ? v : (v != null && v !== '' ? [v] : [])
     },
-    emitField (uuid, value) {
+    emitField (propId, value) {
+      const uuid = this.resolveUuid(propId)
       this.$emit('update:modelValue', { ...this.modelValue, [uuid]: value })
     },
     importFromDocFor (propertyId) {

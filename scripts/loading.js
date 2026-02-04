@@ -12,6 +12,8 @@ var BUNDLE_MOUNT_SELECTOR = '#main-container';
 var ON_PREMISE = true;
 /** Fixed repository ID (UUID), or null to resolve from URL. */
 var REPO_ID = null;
+/** Enable debug logging in the Vue app (console.log, console.warn, etc.). */
+var DEBUG = false;
 /** Auto-trigger: set to true to automatically call formInit when Form.io is detected. */
 var AUTO_TRIGGER = true;
 // --- End config ---
@@ -38,6 +40,18 @@ var vueLoaderFormInit = function (form, data) {
     docId = window.resolveDocIdFromProcess({ log: false });
   }
   if (docId != null) dataObj.docId = docId;
+  
+  // Extract dmsProperties from common locations (similar to docId extraction)
+  var dmsProperties = dataObj.dmsProperties || 
+                      dataObj.data?.dmsProperties ||
+                      (form && form.submission && form.submission.data && form.submission.data.dmsProperties) ||
+                      (form && form.data && form.data.dmsProperties) ||
+                      (typeof window !== 'undefined' && window.DMS_PROPERTIES) ||
+                      null;
+  if (dmsProperties != null) {
+    dataObj.dmsProperties = dmsProperties;
+    if (typeof console !== 'undefined') console.log('[vue-loader] Found dmsProperties:', Object.keys(dmsProperties).length, 'properties');
+  }
 
   var mountEl = null;
   if (BUNDLE_MOUNT_SELECTOR && typeof document !== 'undefined') {
@@ -59,7 +73,8 @@ var vueLoaderFormInit = function (form, data) {
     data: dataObj,
     mountEl: mountEl,
     onPremise: !!ON_PREMISE,
-    repoId: REPO_ID || null
+    repoId: REPO_ID || null,
+    debug: !!DEBUG
   };
   if (typeof console !== 'undefined') console.log('[vue-loader] context set, loading script:', BUNDLE_URL);
 

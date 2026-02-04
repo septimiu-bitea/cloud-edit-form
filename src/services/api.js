@@ -1,7 +1,7 @@
 /**
  * d.velop DMS API client (cloud + on-premise). On-premise uses storedoctype for categories/properties/datasets.
  */
-import { REPO_ID } from '@/config'
+// REPO_ID comes from scripts/loading.js via window.__formInitContext.repoId (or env vars for local dev)
 
 function createJ (apiKey) {
   const j = async (u, o = {}) => {
@@ -313,8 +313,11 @@ let _repoIdCache = null
  */
 export function usedRepoId (base = typeof window !== 'undefined' ? window.location.origin : '') {
   if (_repoIdCache) return _repoIdCache
-  if (REPO_ID) {
-    _repoIdCache = REPO_ID
+  // Read from __formInitContext (set by scripts/loading.js) or env vars for local dev
+  const repoId = (typeof window !== 'undefined' && window.__formInitContext?.repoId) ||
+    import.meta.env?.VITE_REPO_ID || null
+  if (repoId) {
+    _repoIdCache = repoId
     return _repoIdCache
   }
   if (typeof window !== 'undefined') {

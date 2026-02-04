@@ -1,9 +1,9 @@
 /**
  * Value extraction and indexing (from section 7). Uses valueCoercion and idMapping.
  */
-import { coerceValueForType } from './valueCoercion'
-import { getNumericIdFromUuid } from './idMapping'
-import { log, dbgTable } from './debug'
+import { coerceValueForType } from './valueCoercion.js'
+import { getNumericIdFromUuid } from './idMapping.js'
+import { log, dbgTable } from './debug.js'
 
 export function buildSrmValueIndex (srmItem, { extraAliases = {} } = {}) {
   const idx = Object.create(null)
@@ -68,11 +68,18 @@ export function buildO2ValueIndex (o2json, idMap = {}) {
   const idx = Object.create(null)
   if (!o2json) return idx
 
-  const sys = Array.isArray(o2json.systemProperties) ? o2json.systemProperties : []
-  sys.forEach(p => {
-    const k = String(p?.id || '').trim()
-    if (k) idx[k] = p?.displayValue ?? p?.value ?? ''
-  })
+  // Handle systemProperties: array (cloud) or object (on-premise)
+  if (Array.isArray(o2json.systemProperties)) {
+    o2json.systemProperties.forEach(p => {
+      const k = String(p?.id || '').trim()
+      if (k) idx[k] = p?.displayValue ?? p?.value ?? ''
+    })
+  } else if (o2json.systemProperties && typeof o2json.systemProperties === 'object') {
+    // On-premise: systemProperties is an object like { "property_document_number": "MW00000001" }
+    for (const [k, v] of Object.entries(o2json.systemProperties)) {
+      if (k && v != null && v !== '') idx[k] = v
+    }
+  }
 
   const obj = Array.isArray(o2json.objectProperties) ? o2json.objectProperties : []
   obj.forEach(p => {
@@ -84,44 +91,70 @@ export function buildO2ValueIndex (o2json, idMap = {}) {
     if (id && idMap[id]) idx[idMap[id]] = val
   })
 
+  // Cloud: multivalueProperties array: [{ id, uuid, values: { "1": "val1", "2": "val2" } }]
   const mv = Array.isArray(o2json.multivalueProperties) ? o2json.multivalueProperties : []
-  mv.forEach(p => {
+  if (mv.length > 0) {
+    log(`[buildO2ValueIndex] Processing ${mv.length} multivalueProperties`)
+  }
+  mv.forEach((p, i) => {
     const id = String(p?.id ?? '').trim()
     const uuid = String(p?.uuid ?? '').trim()
     const valuesObj = p?.values || {}
+    
+    // Convert values object to array: { "1": "val1", "2": "val2" } -> ["val1", "val2"]
     const arr = Object.keys(valuesObj)
       .sort((a, b) => Number(a) - Number(b))
       .map(k => valuesObj[k])
       .filter(v => v != null && String(v).trim() !== '')
+    
+    if (i < 3 || id === '159') {
+      log(`[buildO2ValueIndex] multivalueProperty[${i}]: id=${id}, uuid=${uuid || 'none'}, valuesObj keys:`, Object.keys(valuesObj), '-> arr:', arr)
+      log(`[buildO2ValueIndex]   idMap[${id}]=`, idMap[id] || 'not found')
+    }
+    
+    // Index by id, uuid, and mapped UUID
     if (id) idx[id] = arr
     if (uuid) idx[uuid] = arr
-    if (id && idMap[id]) idx[idMap[id]] = arr
+    if (id && idMap[id]) {
+      idx[idMap[id]] = arr
+      if (i < 3 || id === '159') {
+        log(`[buildO2ValueIndex]   ✓ Indexed by UUID ${idMap[id]}:`, arr)
+      }
+    } else if (i < 3 || id === '159') {
+      log(`[buildO2ValueIndex]   ⚠️ No UUID mapping for id ${id}`)
+    }
   })
 
-  // On-premise: O2 often returns extendedProperties (object keyed by id) instead of
-  // objectProperties / multivalueProperties. Index them so normal and multivalue values populate.
+  // On-premise: multivalueExtendedProperties object: { "159": { "1": "val1", "2": "val2" } }
+  const mvep = o2json.multivalueExtendedProperties
+  if (mvep && typeof mvep === 'object' && !Array.isArray(mvep)) {
+    for (const [id, valuesObj] of Object.entries(mvep)) {
+      const k = String(id ?? '').trim()
+      if (!k || !valuesObj || typeof valuesObj !== 'object' || Array.isArray(valuesObj)) continue
+      
+      // Convert slot map to array: { "1": "val1", "2": "val2" } -> ["val1", "val2"]
+      const arr = Object.keys(valuesObj)
+        .sort((a, b) => Number(a) - Number(b))
+        .map(slot => valuesObj[slot])
+        .filter(v => v != null && String(v).trim() !== '')
+      
+      idx[k] = arr
+      idx['property_' + k] = arr
+      if (idMap[k]) idx[idMap[k]] = arr
+    }
+  }
+
+  // On-premise: extendedProperties object keyed by numeric id (single values only)
   const ext = o2json.extendedProperties
   if (ext && typeof ext === 'object' && !Array.isArray(ext)) {
     for (const [id, val] of Object.entries(ext)) {
       const k = String(id ?? '').trim()
-      if (!k) continue
-      const isSlotMap = val != null && typeof val === 'object' && !Array.isArray(val) && Object.keys(val).every(key => /^\d+$/.test(key))
-      const isArrayMulti = Array.isArray(val)
-      let value
-      if (isSlotMap) {
-        value = Object.keys(val)
-          .sort((a, b) => Number(a) - Number(b))
-          .map(slot => val[slot])
-          .filter(v => v != null && String(v).trim() !== '')
-      } else if (isArrayMulti) {
-        value = val.filter(v => v != null && String(v).trim() !== '')
-      } else {
-        value = (val != null && val !== '' ? val : null)
-      }
-      if (value == null && !isSlotMap && !isArrayMulti) continue
-      if (k) idx[k] = value
-      idx['property_' + k] = value
-      if (idMap[k]) idx[idMap[k]] = value
+      if (!k || val == null || val === '') continue
+      // Skip if it's an object (should be in multivalueExtendedProperties)
+      if (typeof val === 'object' && !Array.isArray(val)) continue
+      idx[k] = val
+      idx['property_' + k] = val
+      if (idMap[k]) idx[idMap[k]] = val
     }
   }
 
@@ -137,41 +170,37 @@ export function buildO2ValueIndex (o2json, idMap = {}) {
  */
 export function buildIndexFromDmsProperties (dmsProperties = {}, idMap = {}) {
   const idx = Object.create(null)
-  if (!dmsProperties || typeof dmsProperties !== 'object') {
-    console.log('[buildIndexFromDmsProperties] No dmsProperties or invalid type:', typeof dmsProperties)
+  if (dmsProperties == null || typeof dmsProperties !== 'object' || Array.isArray(dmsProperties)) {
     return idx
   }
-  console.log('[buildIndexFromDmsProperties] Processing', Object.keys(dmsProperties).length, 'properties')
-  console.log('[buildIndexFromDmsProperties] Sample keys:', Object.keys(dmsProperties).slice(0, 10))
-  console.log('[buildIndexFromDmsProperties] idMap size:', Object.keys(idMap).length)
+  
   for (const [k, v] of Object.entries(dmsProperties)) {
     const key = String(k ?? '').trim()
     if (!key) continue
-    // Handle arrays (multivalue) - filter out null/empty values
+    
+    // Handle slot maps: { "1": "val1", "2": "val2" } -> ["val1", "val2"]
+    const isSlotMap = v != null && typeof v === 'object' && !Array.isArray(v) && Object.keys(v).every(slotKey => /^\d+$/.test(slotKey))
     let value = v
-    if (Array.isArray(value)) {
+    if (isSlotMap) {
+      value = Object.keys(v)
+        .sort((a, b) => Number(a) - Number(b))
+        .map(slot => v[slot])
+        .filter(x => x != null && String(x).trim() !== '')
+    } else if (Array.isArray(value)) {
       value = value.filter(x => x != null && String(x).trim() !== '')
     } else if (value == null || value === '') {
       value = null
     }
-    // Skip null/empty single values (but keep arrays even if empty for multivalue fields)
-    if (value == null && !Array.isArray(v)) continue
     
-    // Store by numeric ID (or property name) - matches buildO2ValueIndex pattern
+    if (value == null && !Array.isArray(v) && !isSlotMap) continue
+    
     idx[key] = value
-    // Add property_ prefix variant (on-premise format)
     idx['property_' + key] = value
-    // Map to UUID if idMap provides the mapping (critical for lookup by UUID)
     if (idMap && typeof idMap === 'object' && idMap[key]) {
       idx[idMap[key]] = value
-      if (Object.keys(dmsProperties).indexOf(k) < 3) {
-        console.log(`[buildIndexFromDmsProperties] Mapped ${key} -> ${idMap[key]}, value:`, value)
-      }
-    } else if (Object.keys(dmsProperties).indexOf(k) < 3) {
-      console.log(`[buildIndexFromDmsProperties] No UUID mapping for ${key} in idMap`)
     }
   }
-  console.log('[buildIndexFromDmsProperties] Built index with', Object.keys(idx).length, 'keys')
+  
   return idx
 }
 
@@ -188,7 +217,7 @@ export function buildInitialValuesFromIndex (catProps = [], { o2Index = null, sr
       if (numericId) {
         v = index[numericId] ?? index['property_' + numericId]
         if (v != null && index === dmsIndex && debugCount < 3) {
-          console.log(`[getBy] Found via reverse lookup: UUID ${key} -> numericId ${numericId}, value:`, v)
+          log(`[getBy] Found via reverse lookup: UUID ${key} -> numericId ${numericId}, value:`, v)
           debugCount++
         }
       }
@@ -198,7 +227,7 @@ export function buildInitialValuesFromIndex (catProps = [], { o2Index = null, sr
     if (v == null && /^\d+$/.test(String(key))) {
       v = index[key] ?? index['property_' + key]
       if (v != null && index === dmsIndex && debugCount < 3) {
-        console.log(`[getBy] Found via numeric ID lookup: ${key}, value:`, v)
+        log(`[getBy] Found via numeric ID lookup: ${key}, value:`, v)
         debugCount++
       }
     }
@@ -210,7 +239,7 @@ export function buildInitialValuesFromIndex (catProps = [], { o2Index = null, sr
       v = index['property_' + key]
     }
     if (v == null && index === dmsIndex && debugCount < 3) {
-      console.log(`[getBy] No value found for key ${key} in dmsIndex. Available keys sample:`, Object.keys(index).slice(0, 10))
+      log(`[getBy] No value found for key ${key} in dmsIndex. Available keys sample:`, Object.keys(index).slice(0, 10))
       debugCount++
     }
     return v
@@ -229,7 +258,7 @@ export function buildInitialValuesFromIndex (catProps = [], { o2Index = null, sr
     // Debug first few properties
     const shouldDebug = propDebugCount < 5
     if (shouldDebug) {
-      console.log(`[buildInitialValues] Property ${propDebugCount}: rawId=${rawId}, uuid=${uuid}, isMulti=${isMulti}`)
+      log(`[buildInitialValues] Property ${propDebugCount}: rawId=${rawId}, uuid=${uuid}, isMulti=${isMulti}`)
     }
 
     // Prefer host data (dmsProperties) when present, then O2, then SRM
@@ -237,9 +266,27 @@ export function buildInitialValuesFromIndex (catProps = [], { o2Index = null, sr
       ? (getBy(dmsIndex, uuid) ?? getBy(o2Index, uuid) ?? getBy(srmIdx, uuid))
       : (getBy(dmsIndex, uuid) ?? getBy(srmIdx, uuid) ?? getBy(o2Index, uuid))
     
-    if (val != null && dmsIndex && shouldDebug) {
-      console.log(`[buildInitialValues] Found value for ${uuid} from dmsIndex:`, val)
+    if (shouldDebug || (isMulti && !val)) {
+      const dmsVal = dmsIndex ? getBy(dmsIndex, uuid) : null
+      const o2Val = o2Index ? getBy(o2Index, uuid) : null
+      const srmVal = srmIdx ? getBy(srmIdx, uuid) : null
+      const o2ValByNumeric = o2Index ? getBy(o2Index, rawId) : null
+      
+      if (val != null) {
+        const source = dmsVal != null ? 'dmsIndex' : (o2Val != null ? 'o2Index' : 'srmIdx')
+        log(`[buildInitialValues] Found value for ${uuid} from ${source}:`, val, isMulti ? '(multivalue)' : '(single)')
+      } else if (isMulti) {
+        log(`[buildInitialValues] ⚠️ No value found for multivalue property ${uuid} (rawId=${rawId})`)
+        log(`[buildInitialValues]   dmsIndex[${uuid}]:`, dmsVal)
+        log(`[buildInitialValues]   o2Index[${uuid}]:`, o2Val)
+        log(`[buildInitialValues]   o2Index[${rawId}]:`, o2ValByNumeric)
+        log(`[buildInitialValues]   srmIdx[${uuid}]:`, srmVal)
+        log(`[buildInitialValues]   o2Index keys sample:`, Object.keys(o2Index || {}).slice(0, 20))
+        log(`[buildInitialValues]   o2Index has ${uuid}?:`, o2Index ? (uuid in o2Index) : false)
+        log(`[buildInitialValues]   o2Index has ${rawId}?:`, o2Index ? (rawId in o2Index) : false)
+      }
     }
+    
     propDebugCount++
 
     if (isMulti) {

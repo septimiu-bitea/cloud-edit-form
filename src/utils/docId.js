@@ -1,6 +1,7 @@
 /**
  * Document ID resolution (from section 2). No Form.io dependency.
  */
+import { log as debugLog } from './debug'
 
 function readParam (name, def = '') {
   try {
@@ -39,8 +40,8 @@ export function resolveDocIdFromProcess (opts = {}) {
     ''
   if (log) {
     console.groupCollapsed('[process → docId]')
-    Object.entries(values).forEach(([k, v]) => console.log(`${k}:`, v))
-    console.log('resolvedDocId:', docId)
+    Object.entries(values).forEach(([k, v]) => debugLog(`${k}:`, v))
+    debugLog('resolvedDocId:', docId)
     console.groupEnd()
   }
   return docId

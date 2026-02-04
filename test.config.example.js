@@ -20,6 +20,11 @@ export const TEST_CONFIG = {
   // Category ID (optional - will be auto-detected from document if not set)
   categoryId: null,
   
+  // On-premise mode: set to true to test on-premise API behavior (uses storedoctype)
+  // Set to false to test cloud API behavior (uses objectmanagement endpoints)
+  // Set to null/undefined to test both (default)
+  onPremise: null,
+  
   // Set to true to skip actual API calls (for development)
   skipApiCalls: false
 };
