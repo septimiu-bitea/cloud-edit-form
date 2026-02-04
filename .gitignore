@@ -4,3 +4,5 @@ dist
 *.local
 .env*.local
 deployment_status
+test.config.js
+tests/test.config.js

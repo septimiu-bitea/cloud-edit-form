@@ -132,46 +132,92 @@ export function buildO2ValueIndex (o2json, idMap = {}) {
 /**
  * Build a value index from the host's data.dmsProperties (e.g. from form submission).
  * Used when the backend sends property values keyed by numeric id and property_* names.
+ * Mirrors the extendedProperties handling in buildO2ValueIndex for on-premise compatibility.
  * Keys in index: id, property_<id>, and idMap[id] (uuid) when idMap is provided.
  */
 export function buildIndexFromDmsProperties (dmsProperties = {}, idMap = {}) {
   const idx = Object.create(null)
-  if (!dmsProperties || typeof dmsProperties !== 'object') return idx
+  if (!dmsProperties || typeof dmsProperties !== 'object') {
+    console.log('[buildIndexFromDmsProperties] No dmsProperties or invalid type:', typeof dmsProperties)
+    return idx
+  }
+  console.log('[buildIndexFromDmsProperties] Processing', Object.keys(dmsProperties).length, 'properties')
+  console.log('[buildIndexFromDmsProperties] Sample keys:', Object.keys(dmsProperties).slice(0, 10))
+  console.log('[buildIndexFromDmsProperties] idMap size:', Object.keys(idMap).length)
   for (const [k, v] of Object.entries(dmsProperties)) {
     const key = String(k ?? '').trim()
     if (!key) continue
+    // Handle arrays (multivalue) - filter out null/empty values
     let value = v
     if (Array.isArray(value)) {
       value = value.filter(x => x != null && String(x).trim() !== '')
     } else if (value == null || value === '') {
       value = null
     }
+    // Skip null/empty single values (but keep arrays even if empty for multivalue fields)
     if (value == null && !Array.isArray(v)) continue
+    
+    // Store by numeric ID (or property name) - matches buildO2ValueIndex pattern
     idx[key] = value
+    // Add property_ prefix variant (on-premise format)
     idx['property_' + key] = value
-    if (idMap[key]) idx[idMap[key]] = value
+    // Map to UUID if idMap provides the mapping (critical for lookup by UUID)
+    if (idMap && typeof idMap === 'object' && idMap[key]) {
+      idx[idMap[key]] = value
+      if (Object.keys(dmsProperties).indexOf(k) < 3) {
+        console.log(`[buildIndexFromDmsProperties] Mapped ${key} -> ${idMap[key]}, value:`, value)
+      }
+    } else if (Object.keys(dmsProperties).indexOf(k) < 3) {
+      console.log(`[buildIndexFromDmsProperties] No UUID mapping for ${key} in idMap`)
+    }
   }
+  console.log('[buildIndexFromDmsProperties] Built index with', Object.keys(idx).length, 'keys')
   return idx
 }
 
 export function buildInitialValuesFromIndex (catProps = [], { o2Index = null, srmItem = null, idMap = {}, dmsIndex = null } = {}) {
   const srmIdx = buildSrmValueIndex(srmItem)
+  let debugCount = 0
 
   const getBy = (index, key) => {
     if (!index) return undefined
     let v = index[key]
+    // If direct lookup failed and we have an idMap, try reverse lookup (UUID -> numeric ID)
     if (v == null && idMap && typeof idMap === 'object') {
       const numericId = Object.entries(idMap).find(([num, u]) => u === key)?.[0]
-      if (numericId) v = index[numericId] ?? index['property_' + numericId]
+      if (numericId) {
+        v = index[numericId] ?? index['property_' + numericId]
+        if (v != null && index === dmsIndex && debugCount < 3) {
+          console.log(`[getBy] Found via reverse lookup: UUID ${key} -> numericId ${numericId}, value:`, v)
+          debugCount++
+        }
+      }
+    }
+    // Also try if key itself looks like a numeric ID (for dmsProperties indexed by numeric IDs)
+    // This handles cases where prop.id is a numeric ID string
+    if (v == null && /^\d+$/.test(String(key))) {
+      v = index[key] ?? index['property_' + key]
+      if (v != null && index === dmsIndex && debugCount < 3) {
+        console.log(`[getBy] Found via numeric ID lookup: ${key}, value:`, v)
+        debugCount++
+      }
     }
     if (v == null && key === 'DOCUMENT_ID') v = index.property_document_id ?? index.DOCUMENT_ID
     if (v == null && key === 'CATEGORY') v = index.property_category ?? index.CATEGORY
     // On-premise: index may be keyed by numeric id or property_<id>
-    if (v == null) v = index['property_' + key]
+    // Try property_ prefix fallback (works for both UUIDs and numeric IDs)
+    if (v == null && !String(key).startsWith('property_')) {
+      v = index['property_' + key]
+    }
+    if (v == null && index === dmsIndex && debugCount < 3) {
+      console.log(`[getBy] No value found for key ${key} in dmsIndex. Available keys sample:`, Object.keys(index).slice(0, 10))
+      debugCount++
+    }
     return v
   }
 
   const out = {}
+  let propDebugCount = 0
   for (const prop of catProps || []) {
     const rawId = String(prop?.id ?? '')
     if (!rawId) continue
@@ -180,10 +226,21 @@ export function buildInitialValuesFromIndex (catProps = [], { o2Index = null, sr
     const dataType = String(prop?.dataType || 'STRING').toUpperCase()
     const coerce = (v) => coerceValueForType(v, dataType)
 
+    // Debug first few properties
+    const shouldDebug = propDebugCount < 5
+    if (shouldDebug) {
+      console.log(`[buildInitialValues] Property ${propDebugCount}: rawId=${rawId}, uuid=${uuid}, isMulti=${isMulti}`)
+    }
+
     // Prefer host data (dmsProperties) when present, then O2, then SRM
     let val = isMulti
       ? (getBy(dmsIndex, uuid) ?? getBy(o2Index, uuid) ?? getBy(srmIdx, uuid))
       : (getBy(dmsIndex, uuid) ?? getBy(srmIdx, uuid) ?? getBy(o2Index, uuid))
+    
+    if (val != null && dmsIndex && shouldDebug) {
+      console.log(`[buildInitialValues] Found value for ${uuid} from dmsIndex:`, val)
+    }
+    propDebugCount++
 
     if (isMulti) {
       if (Array.isArray(val)) {

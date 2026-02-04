@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "vite build",
     "build:bundle": "vite build --config vite.bundle.config.js",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:dmsProperties": "node --experimental-modules --input-type=module tests/dmsProperties.test.js || echo 'Run in browser: npm run dev, then open console and run: window.runDmsPropertiesTests()'",
+    "test": "npm run test:dmsProperties"
   },
   "dependencies": {
     "@mdi/font": "^7.4.0",

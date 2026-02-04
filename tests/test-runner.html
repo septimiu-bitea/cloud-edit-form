@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DMS Properties Test Runner</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    .container {
+      background: white;
+      border-radius: 8px;
+      padding: 24px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    h1 {
+      margin-top: 0;
+      color: #333;
+    }
+    .config-section {
+      background: #f9f9f9;
+      padding: 16px;
+      border-radius: 4px;
+      margin-bottom: 20px;
+    }
+    .config-section h2 {
+      margin-top: 0;
+      font-size: 18px;
+      color: #666;
+    }
+    label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: 500;
+      color: #555;
+    }
+    input {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 14px;
+      box-sizing: border-box;
+      margin-bottom: 12px;
+    }
+    button {
+      background: #1976d2;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 4px;
+      font-size: 16px;
+      cursor: pointer;
+      margin-right: 8px;
+      margin-top: 8px;
+    }
+    button:hover {
+      background: #1565c0;
+    }
+    button:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
+    .results {
+      margin-top: 24px;
+      padding: 16px;
+      background: #f9f9f9;
+      border-radius: 4px;
+      font-family: 'Courier New', monospace;
+      font-size: 13px;
+      max-height: 600px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+    }
+    .info {
+      background: #e3f2fd;
+      padding: 12px;
+      border-radius: 4px;
+      margin-bottom: 16px;
+      color: #1976d2;
+    }
+    .warning {
+      background: #fff3e0;
+      padding: 12px;
+      border-radius: 4px;
+      margin-bottom: 16px;
+      color: #f57c00;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🧪 DMS Properties Test Runner</h1>
+    
+    <div class="info">
+      <strong>Instructions:</strong> Fill in your test configuration below, then click "Run Tests" to test dmsProperties population.
+      The tests will fetch real API data and verify that values from dmsProperties are correctly populated in form fields.
+    </div>
+    
+    <div class="warning" id="configWarning" style="display: none;">
+      <strong>⚠️ Configuration Required:</strong> Please fill in at least Base URL and Repository ID to run integration tests.
+    </div>
+
+    <div class="config-section">
+      <h2>Test Configuration</h2>
+      <label for="baseUrl">Base URL:</label>
+      <input type="text" id="baseUrl" placeholder="https://your-instance.d-velop.cloud" value="https://sbite-traininginvoices2508.d-velop.cloud">
+      
+      <label for="apiKey">API Key (optional - cookies will be used if not provided):</label>
+      <input type="password" id="apiKey" placeholder="Leave empty to use cookie-based auth" value="">
+      
+      <label for="repoId">Repository ID:</label>
+      <input type="text" id="repoId" placeholder="f7258e62-5526-49e5-abc5-d0ced1b4ada5" value="f7258e62-5526-49e5-abc5-d0ced1b4ada5">
+      
+      <label for="documentId">Document ID:</label>
+      <input type="text" id="documentId" placeholder="MW00000001" value="MW00000001">
+      
+      <label for="categoryId">Category ID (optional - will be auto-detected):</label>
+      <input type="text" id="categoryId" placeholder="afab2739-e5c6-4db3-961c-57de3d29dd76" value="afab2739-e5c6-4db3-961c-57de3d29dd76">
+      
+      <label>
+        <input type="checkbox" id="skipApiCalls" style="width: auto; margin-right: 8px;">
+        Skip API calls (use mock data only)
+      </label>
+    </div>
+
+    <button id="runTests">Run Tests</button>
+    <button id="clearResults">Clear Results</button>
+
+    <div class="results" id="results" style="display: none;">
+      <strong>Test Results:</strong><br>
+      <div id="resultsContent"></div>
+    </div>
+  </div>
+
+  <script type="module">
+    // Capture console output
+    const originalLog = console.log
+    const originalError = console.error
+    const originalWarn = console.warn
+    const originalGroup = console.group
+    const originalGroupEnd = console.groupEnd
+    
+    let output = ''
+    
+    function captureOutput(fn, prefix = '') {
+      return (...args) => {
+        const message = args.map(arg => 
+          typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
+        ).join(' ')
+        output += prefix + message + '\n'
+        fn(...args)
+      }
+    }
+    
+    console.log = captureOutput(originalLog)
+    console.error = captureOutput(originalError, '❌ ')
+    console.warn = captureOutput(originalWarn, '⚠️ ')
+    console.group = captureOutput(originalGroup, '▶ ')
+    console.groupEnd = () => {
+      output += '\n'
+      originalGroupEnd()
+    }
+    
+    // Load test module
+    let testModule
+    
+    // Load config from test.config.js
+    async function loadConfigFromFile() {
+      try {
+        // Try to import test.config.js - it might not be accessible in browser due to CORS/build config
+        const configModule = await import('../test.config.js?t=' + Date.now())
+        const config = configModule.TEST_CONFIG || configModule.default || configModule
+        console.log('✅ Successfully loaded test.config.js')
+        return config
+      } catch (err) {
+        console.log('⚠️ Could not load test.config.js:', err.message)
+        console.log('   Using form defaults and localStorage values')
+        return null
+      }
+    }
+    
+    async function loadTests() {
+      try {
+        // Set up test config from form
+        window.TEST_CONFIG = {
+          baseUrl: document.getElementById('baseUrl').value || import.meta.env.VITE_BASE_URL || '',
+          apiKey: document.getElementById('apiKey').value || import.meta.env.VITE_API_KEY || null,
+          repoId: document.getElementById('repoId').value || import.meta.env.VITE_REPO_ID || null,
+          documentId: document.getElementById('documentId').value || import.meta.env.VITE_DOCUMENT_ID || 'MW00000001',
+          categoryId: document.getElementById('categoryId').value || import.meta.env.VITE_CATEGORY_ID || null,
+          skipApiCalls: document.getElementById('skipApiCalls').checked
+        }
+        
+        // Import test module
+        testModule = await import('./dmsProperties.test.js')
+        return true
+      } catch (err) {
+        console.error('Failed to load tests:', err)
+        return false
+      }
+    }
+    
+    // Populate form from config file on load
+    async function populateFormFromConfig() {
+      const config = await loadConfigFromFile()
+      if (config) {
+        // Always use config values if they exist (they override HTML defaults)
+        if (config.baseUrl) {
+          document.getElementById('baseUrl').value = config.baseUrl
+        }
+        if (config.apiKey) {
+          document.getElementById('apiKey').value = config.apiKey
+        }
+        if (config.repoId) {
+          document.getElementById('repoId').value = config.repoId
+        }
+        if (config.documentId) {
+          document.getElementById('documentId').value = config.documentId
+        }
+        if (config.categoryId) {
+          document.getElementById('categoryId').value = config.categoryId
+        }
+        if (config.skipApiCalls !== undefined) {
+          document.getElementById('skipApiCalls').checked = config.skipApiCalls
+        }
+        console.log('✅ Loaded configuration from test.config.js')
+        return true
+      }
+      return false
+    }
+    
+    document.getElementById('runTests').addEventListener('click', async () => {
+      const baseUrl = document.getElementById('baseUrl').value.trim()
+      const repoId = document.getElementById('repoId').value.trim()
+      const skipApiCalls = document.getElementById('skipApiCalls').checked
+      
+      // Show warning if config is missing
+      const warningDiv = document.getElementById('configWarning')
+      if (!skipApiCalls && (!baseUrl || !repoId)) {
+        warningDiv.style.display = 'block'
+        return
+      } else {
+        warningDiv.style.display = 'none'
+      }
+      
+      output = ''
+      const resultsDiv = document.getElementById('results')
+      const resultsContent = document.getElementById('resultsContent')
+      resultsDiv.style.display = 'block'
+      resultsContent.textContent = 'Running tests...\n\n'
+      
+      const loaded = await loadTests()
+      if (!loaded) {
+        resultsContent.textContent = 'Failed to load test module. Check console for errors.'
+        return
+      }
+      
+      try {
+        const { runTests } = testModule
+        await runTests()
+        resultsContent.textContent = output || 'Tests completed. Check browser console for detailed output.'
+      } catch (err) {
+        resultsContent.textContent = output + '\n\nError: ' + err.message + '\n' + err.stack
+      }
+    })
+    
+    document.getElementById('clearResults').addEventListener('click', () => {
+      document.getElementById('results').style.display = 'none'
+      document.getElementById('resultsContent').textContent = ''
+      output = ''
+    })
+    
+    // Load config: first try test.config.js, then localStorage, then defaults
+    async function initializeConfig() {
+      try {
+        // First try to load from test.config.js
+        await populateFormFromConfig()
+        
+        // Then try localStorage (user's manual overrides) - only override if values exist
+        const savedConfig = localStorage.getItem('dmsPropertiesTestConfig')
+        if (savedConfig) {
+          try {
+            const config = JSON.parse(savedConfig)
+            // Only override if user has manually set values (non-empty)
+            if (config.baseUrl && config.baseUrl.trim()) document.getElementById('baseUrl').value = config.baseUrl
+            if (config.apiKey && config.apiKey.trim()) document.getElementById('apiKey').value = config.apiKey
+            if (config.repoId && config.repoId.trim()) document.getElementById('repoId').value = config.repoId
+            if (config.documentId && config.documentId.trim()) document.getElementById('documentId').value = config.documentId
+            if (config.categoryId && config.categoryId.trim()) document.getElementById('categoryId').value = config.categoryId
+            if (config.skipApiCalls !== undefined) document.getElementById('skipApiCalls').checked = config.skipApiCalls
+          } catch (e) {
+            // Ignore parse errors
+            console.warn('Could not parse saved config from localStorage:', e)
+          }
+        }
+      } catch (err) {
+        console.warn('Error initializing config:', err)
+      }
+    }
+    
+    // Initialize config on page load
+    initializeConfig().catch(console.error)
+    
+    // Save config on change - wait for DOM to be ready
+    function setupConfigSaving() {
+      const ids = ['baseUrl', 'apiKey', 'repoId', 'documentId', 'categoryId', 'skipApiCalls']
+      ids.forEach(id => {
+        const el = document.getElementById(id)
+        if (el) {
+          el.addEventListener('change', () => {
+            const config = {
+              baseUrl: document.getElementById('baseUrl').value,
+              apiKey: document.getElementById('apiKey').value,
+              repoId: document.getElementById('repoId').value,
+              documentId: document.getElementById('documentId').value,
+              categoryId: document.getElementById('categoryId').value,
+              skipApiCalls: document.getElementById('skipApiCalls').checked
+            }
+            localStorage.setItem('dmsPropertiesTestConfig', JSON.stringify(config))
+          })
+        }
+      })
+    }
+    
+    // Setup config saving after DOM is ready
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', setupConfigSaving)
+    } else {
+      setupConfigSaving()
+    }
+  </script>
+</body>
+</html>

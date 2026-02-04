@@ -135,6 +135,11 @@ export default {
   },
   async mounted () {
     const ctx = this.formInitContext
+    console.log('[EditView] formInitContext:', ctx)
+    console.log('[EditView] formInitContext.data:', ctx?.data)
+    console.log('[EditView] formInitContext.data?.data:', ctx?.data?.data)
+    console.log('[EditView] formInitContext.data?.dmsProperties:', ctx?.data?.dmsProperties)
+    console.log('[EditView] formInitContext.data?.data?.dmsProperties:', ctx?.data?.data?.dmsProperties)
     if (!ctx?.base) {
       this.error = this.t(ctx?.uiLocale || 'en', 'errorNoContext')
       return
@@ -200,13 +205,19 @@ export default {
       const o2Index = buildO2ValueIndex(o2Resp, this.idMap)
       // Host may pass data.dmsProperties (e.g. from backend); use it so standard properties populate on-prem
       const dmsProps = this.formInitContext?.data?.dmsProperties ?? this.formInitContext?.data?.data?.dmsProperties
+      console.log('[EditView] dmsProperties from context:', dmsProps)
+      console.log('[EditView] idMap size:', Object.keys(this.idMap).length)
       const dmsIndex = buildIndexFromDmsProperties(dmsProps, this.idMap)
+      console.log('[EditView] dmsIndex keys:', Object.keys(dmsIndex).slice(0, 20))
+      console.log('[EditView] Sample dmsIndex entries:', Object.fromEntries(Object.entries(dmsIndex).slice(0, 5)))
       this.initialValues = buildInitialValuesFromIndex(catP.arr, {
         o2Index,
         srmItem: firstItem,
         idMap: this.idMap,
         dmsIndex: Object.keys(dmsIndex).length ? dmsIndex : null
       })
+      console.log('[EditView] initialValues keys:', Object.keys(this.initialValues).slice(0, 20))
+      console.log('[EditView] Sample initialValues:', Object.fromEntries(Object.entries(this.initialValues).slice(0, 5)))
       this.categoryProperties = catP.arr || []
       this.o2Response = o2Resp
 
