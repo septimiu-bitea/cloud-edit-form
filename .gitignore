@@ -6,6 +6,7 @@ dist
 deployment_status
 test.config.js
 tests/test.config.js
+api_responses/
 
 # Logs
 logs/
