@@ -26,7 +26,7 @@
         </v-tabs>
         <v-divider class="mb-3 flex-shrink-0" />
         <v-tabs-window v-model="activeTab" class="edit-view-tabs-window">
-          <v-tabs-window-item value="properties" class="edit-view-tab-item">
+          <v-tabs-window-item value="properties" class="edit-view-tab-item mt-2">
             <div class="edit-view-tab-scroll">
               <v-checkbox
                 v-model="showMultivalueOnly"
@@ -45,7 +45,7 @@
               />
             </div>
           </v-tabs-window-item>
-          <v-tabs-window-item value="system" class="edit-view-tab-item">
+          <v-tabs-window-item value="system" class="edit-view-tab-item mt-2">
             <div class="edit-view-tab-scroll">
               <SystemPropertiesView :system-properties="systemPropertiesList" :current-locale="locale" />
             </div>
