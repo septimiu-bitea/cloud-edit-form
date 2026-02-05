@@ -569,11 +569,17 @@ export default {
 
         if (!validationResult.ok) {
           const errorData = validationResult.json || {}
-          let errorMsg = errorData.reason
-            ? (errorData.errorCode ? `[${errorData.errorCode}] ${errorData.reason}` : errorData.reason)
-            : (errorData.message || errorData.error || this.t(this.locale, 'saveFailedWithStatus', validationResult.status))
+          let errorMsg
           if (validationResult.status === 409 || validationResult.status === 412) {
             errorMsg = this.t(this.locale, 'documentEditedByAnotherUser') || 'Document is being edited by another user. Please refresh and try again.'
+          } else {
+            const details = (errorData.details ?? '').trim()
+            const reason = (errorData.reason ?? '').trim()
+            errorMsg = details
+              || (reason ? (errorData.errorCode ? `[${errorData.errorCode}] ${reason}` : reason) : null)
+              || errorData.message
+              || errorData.error
+              || this.t(this.locale, 'saveFailedWithStatus', validationResult.status)
           }
           this.snackbar = { show: true, text: errorMsg, color: 'error' }
           return
@@ -625,6 +631,7 @@ export default {
 
         if (result.ok) {
           await this.refetchDocument()
+          this.invalidFields = []
           this.snackbar = { show: true, text: this.t(this.locale, 'savedSuccessfully'), color: 'success' }
         } else {
           const msg = result.json?.message || result.text || this.t(this.locale, 'saveFailedWithStatus', result.status)
