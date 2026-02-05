@@ -78,10 +78,9 @@ import {
   getMultivalueSlotMaps,
   collectSourceProperties,
   buildValidationPayload,
-  buildSourcePropertiesFromValidationResponse,
+  buildUpdatePayloadFromValidationResponse,
   extractValuesFromValidationResponse,
-  buildO2mPayload,
-  putO2mUpdate
+  putO2Update
 } from '@/services/submission'
 import { resolveDocIdFromProcess } from '@/utils/docId'
 import { mapIdtoUniqueId, idToUniqueIdFromSrm, getNumericIdFromUuid } from '@/utils/idMapping'
@@ -613,19 +612,18 @@ export default {
           }
         }
 
-        const sourceProperties = buildSourcePropertiesFromValidationResponse(validationResponse, {
-          idMap: this.idMap,
-          catPropsArr: this.categoryProperties,
-          metaIdx: this.metaIdx
+        const updatePayload = buildUpdatePayloadFromValidationResponse(validationResponse, {
+          storeObject: validationPayload.storeObject
         })
-        // Default source system (required for property mapping): /dms/r/{repositoryId}/source
-        const sourceId = this.repoId ? `/dms/r/${encodeURIComponent(this.repoId)}/source` : ''
-        const payload = buildO2mPayload({ sourceProperties, sourceId })
-        const result = await putO2mUpdate({
+        if (!updatePayload) {
+          this.snackbar = { show: true, text: this.t(this.locale, 'saveFailedWithStatus', 500) || 'Save failed', color: 'error' }
+          return
+        }
+        const result = await putO2Update({
           base: this.base,
           repoId: this.repoId,
-          dmsObjectId: this.docId,
-          payload,
+          documentId: this.docId,
+          payload: updatePayload,
           apiKey
         })
 

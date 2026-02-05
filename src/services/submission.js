@@ -421,6 +421,31 @@ export function buildSourcePropertiesFromValidationResponse (validationResponse,
 }
 
 /**
+ * Build update payload (5) from validate response (4).
+ * Used for PUT /dms/r/{repoId}/o2/{documentId} with full document body.
+ * Merges validation response with type, storeObject (from validate request), and state.
+ */
+export function buildUpdatePayloadFromValidationResponse (validationResponse, { storeObject } = {}) {
+  if (!validationResponse || typeof validationResponse !== 'object') return null
+  const systemProperties = { ...(validationResponse.systemProperties || {}) }
+  if (validationResponse.colorCode != null && systemProperties.property_colorcode === undefined) {
+    systemProperties.property_colorcode = String(validationResponse.colorCode)
+  }
+  return {
+    type: 1,
+    objectDefinitionId: validationResponse.objectDefinitionId,
+    systemProperties,
+    remarks: validationResponse.remarks ?? {},
+    multivalueExtendedProperties: validationResponse.multivalueExtendedProperties ?? {},
+    extendedProperties: validationResponse.extendedProperties ?? {},
+    docNumber: validationResponse.docNumber,
+    id: validationResponse.id,
+    storeObject: storeObject && typeof storeObject === 'object' ? storeObject : {},
+    state: null
+  }
+}
+
+/**
  * Build O2m update payload body.
  */
 export function buildO2mPayload ({
@@ -443,6 +468,26 @@ export function buildO2mPayload ({
     ...(contentLocationUri ? { contentLocationUri } : {}),
     ...(contentUri ? { contentUri } : {})
   }
+}
+
+/**
+ * PUT /dms/r/{repoId}/o2/{documentId} – full document update. Returns { ok, status, json, text }.
+ * Body is the full document payload (built from validate response + storeObject).
+ */
+export async function putO2Update ({ base, repoId, documentId, payload, apiKey }) {
+  const url = `${base}/dms/r/${encodeURIComponent(repoId)}/o2/${encodeURIComponent(documentId)}`
+  const headers = { 'Content-Type': 'application/json', Accept: 'application/hal+json, application/json;q=0.9' }
+  if (apiKey) headers.Authorization = `Bearer ${apiKey}`
+  const res = await fetch(url, {
+    method: 'PUT',
+    credentials: apiKey ? 'omit' : 'include',
+    headers,
+    body: JSON.stringify(payload)
+  })
+  const text = await res.text()
+  let json = null
+  try { json = text ? JSON.parse(text) : null } catch { }
+  return { ok: res.ok, status: res.status, json, text }
 }
 
 /**
