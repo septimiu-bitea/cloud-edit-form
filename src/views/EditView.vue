@@ -75,6 +75,7 @@ import { createApi, usedRepoId } from '@/services/api'
 import {
   toMetaIndex,
   makePrevMap,
+  getMultivalueSlotMaps,
   collectSourceProperties,
   buildValidationPayload,
   buildSourcePropertiesFromValidationResponse,
@@ -131,6 +132,8 @@ export default {
       // Form State (single source of truth)
       formData: {},
       previousValues: {},
+      /** Multivalue slot maps from last load/validation: { [uuid]: { "1": "v1", "2": "v2", "6": "v3" } } for exact slot keys */
+      previousSlotMaps: {},
       // Validation state (array of UUIDs for invalid fields)
       invalidFields: []
     }
@@ -381,6 +384,7 @@ export default {
         this.idMap,
         this.formData
       )
+      this.previousSlotMaps = getMultivalueSlotMaps(this.raw.o2Response, this.categoryProperties, this.idMap)
       this.metaIdx = toMetaIndex(this.categoryProperties, { idMap: this.idMap })
 
       // Log mandatory fields for this document's category only
@@ -528,6 +532,7 @@ export default {
         const formLike = {
           submission: { data: this.formData },
           _o2mPrev: this.previousValues,
+          _o2mPrevSlotMap: this.previousSlotMaps,
           _o2Response: this.raw.o2Response,
           _srmItem: this.raw.srmItem
         }
@@ -585,6 +590,16 @@ export default {
             }
           }
         }
+        // Keep previousSlotMaps in sync with validation response (exact slot keys for next save)
+        const mvep = validationResponse?.multivalueExtendedProperties
+        if (mvep && typeof mvep === 'object') {
+          for (const [numericId, valuesObj] of Object.entries(mvep)) {
+            const uuid = this.idMap[numericId]
+            if (uuid && valuesObj && typeof valuesObj === 'object') {
+              this.previousSlotMaps[uuid] = { ...valuesObj }
+            }
+          }
+        }
 
         const sourceProperties = buildSourcePropertiesFromValidationResponse(validationResponse, {
           idMap: this.idMap,
@@ -603,13 +618,7 @@ export default {
         })
 
         if (result.ok) {
-          this.previousValues = makePrevMap(
-            this.raw.o2Response,
-            this.raw.srmItem,
-            this.categoryProperties,
-            this.idMap,
-            this.formData
-          )
+          await this.refetchDocument()
           this.snackbar = { show: true, text: this.t(this.locale, 'savedSuccessfully'), color: 'success' }
         } else {
           const msg = result.json?.message || result.text || this.t(this.locale, 'saveFailedWithStatus', result.status)
@@ -635,8 +644,43 @@ export default {
       if (!o2Resp?.id) throw new Error('Document not found.')
       const values = extractValuesForUuidFromO2(o2Resp, propertyId, this.idMap || {}, { isMulti: true, dataType: 'STRING' })
       return Array.isArray(values) ? values.map(v => String(v ?? '')) : []
+    },
+    /**
+     * Refetch the document (O2) from the server and refresh form state.
+     * Used after save to show what was actually persisted.
+     */
+    async refetchDocument () {
+      if (!this.base || !this.repoId || !this.docId || !this.loaded) return
+      const apiKey = import.meta.env.VITE_API_KEY || undefined
+      const Dv = createApi({ base: this.base, locale: this.locale, apiKey, onPremise: this.formInitContext?.onPremise })
+      const o2Resp = await Dv.o2(this.base, this.repoId, this.docId)
+      if (!o2Resp?.id) return
+      this.raw.o2Response = o2Resp
+      if (this.rawFetchResponses) this.rawFetchResponses.o2 = o2Resp
+      const { initialValues, multivalueUuids } = buildInitialValuesFromO2(o2Resp, {
+        idMap: this.idMap,
+        categoryProperties: this.categoryProperties,
+        onPremise: this.onPremise
+      })
+      const srmDp = Array.isArray(this.raw.srmItem?.displayProperties) ? this.raw.srmItem.displayProperties : []
+      srmDp.forEach(p => {
+        const uuid = this.idMap[p?.id] || p?.id
+        const val = p?.displayValue ?? p?.value ?? ''
+        if (uuid && !multivalueUuids.has(uuid) && !initialValues[uuid] && val != null && val !== '') {
+          initialValues[uuid] = val
+        }
+      })
+      this.formData = { ...initialValues }
+      this.previousValues = makePrevMap(
+        this.raw.o2Response,
+        this.raw.srmItem,
+        this.categoryProperties,
+        this.idMap,
+        this.formData
+      )
+      this.previousSlotMaps = getMultivalueSlotMaps(this.raw.o2Response, this.categoryProperties, this.idMap)
     }
-  }
+}
 }
 </script>
 

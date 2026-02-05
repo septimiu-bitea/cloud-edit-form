@@ -26,6 +26,35 @@ export function toMetaIndex (catPropsArr, { idMap } = {}) {
 }
 
 /**
+ * Build multivalue slot maps from O2 response: { [uuid]: { "1": "v1", "2": "v2", "6": "v3" }, ... }.
+ * Used to preserve exact (possibly non-consecutive) slot keys when sending validation payload.
+ */
+export function getMultivalueSlotMaps (o2json, catPropsArr = [], idMap = {}) {
+  const out = {}
+  const resolve = (id) => (id && idMap[id]) ? idMap[id] : id
+
+  const mv = Array.isArray(o2json?.multivalueProperties) ? o2json.multivalueProperties : []
+  mv.forEach(p => {
+    const id = String(p?.id ?? '').trim()
+    const uuid = p?.uuid || resolve(id) || id
+    const valuesObj = p?.values
+    if (!uuid || !valuesObj || typeof valuesObj !== 'object' || Array.isArray(valuesObj)) return
+    out[uuid] = { ...valuesObj }
+  })
+
+  const mvep = o2json?.multivalueExtendedProperties
+  if (mvep && typeof mvep === 'object' && !Array.isArray(mvep)) {
+    for (const [id, valuesObj] of Object.entries(mvep)) {
+      const k = String(id ?? '').trim()
+      if (!k || !valuesObj || typeof valuesObj !== 'object' || Array.isArray(valuesObj)) continue
+      const uuid = resolve(k)
+      if (!(uuid in out)) out[uuid] = { ...valuesObj }
+    }
+  }
+  return out
+}
+
+/**
  * Build previous-values map for diff (formData = initial form state after load).
  */
 export function makePrevMap (o2json, srmItem, catPropsArr = [], idMap = {}, formData = null) {
@@ -160,6 +189,7 @@ export function buildValidationPayload ({
   const extendedProperties = {}
   const multivalueExtendedProperties = {}
   const prevMap = form?._o2mPrev || {}
+  const prevSlotMaps = form?._o2mPrevSlotMap || {}
 
   const norm = (v, dt) => (coerceValueForType(v, dt) == null ? '' : String(coerceValueForType(v, dt))).trim()
   const normalizeMulti = (raw, dt) => {
@@ -201,10 +231,22 @@ export function buildValidationPayload ({
 
     if (meta.isMulti) {
       const curr = normalizeMulti(raw, dt)
-      const prevVal = prevMap[formDataKey] ?? prevMap[propId]
-      const prevArr = Array.isArray(prevVal)
-        ? prevVal.map(v => norm(v, dt)).filter(v => v !== '')
-        : []
+      const prevSlotMap = prevSlotMaps[formDataKey] ?? prevSlotMaps[propId]
+      let prevSlotKeys
+      let prevArr
+      if (prevSlotMap && typeof prevSlotMap === 'object' && !Array.isArray(prevSlotMap)) {
+        prevSlotKeys = Object.keys(prevSlotMap)
+          .filter(k => /^\d+$/.test(String(k)))
+          .sort((a, b) => Number(a) - Number(b))
+        prevArr = prevSlotKeys.map(k => (prevSlotMap[k] != null ? String(prevSlotMap[k]).trim() : ''))
+      }
+      if (!prevSlotKeys || prevSlotKeys.length === 0) {
+        const prevVal = prevMap[formDataKey] ?? prevMap[propId]
+        prevArr = Array.isArray(prevVal)
+          ? prevVal.map(v => norm(v, dt)).filter(v => v !== '')
+          : []
+        prevSlotKeys = prevArr.map((_, idx) => String(idx + 1))
+      }
       const valuesObj = {}
       const remaining = curr.slice()
       const slots = prevArr.map(prevVal => {
@@ -219,22 +261,18 @@ export function buildValidationPayload ({
       for (let i = 0; i < slots.length; i++) {
         if (slots[i] === null && remaining.length > 0) slots[i] = remaining.shift()
       }
-      slots.forEach((val, idx) => {
-        valuesObj[String(idx + 1)] = val != null ? val : ''
+      prevSlotKeys.forEach((slotKey, idx) => {
+        valuesObj[slotKey] = slots[idx] != null ? slots[idx] : ''
       })
-      let slotIndex = slots.length + 1
+      let nextSlot = prevSlotKeys.length
+        ? Math.max(...prevSlotKeys.map(k => Number(k)), 0) + 1
+        : 1
       remaining.forEach(val => {
-        valuesObj[String(slotIndex)] = val
-        slotIndex++
+        valuesObj[String(nextSlot)] = val
+        nextSlot++
       })
-      // Only include non-empty values in the payload (exclude deleted slots)
-      const filled = Object.keys(valuesObj)
-        .sort((a, b) => Number(a) - Number(b))
-        .map(k => valuesObj[k])
-        .filter(v => v != null && String(v).trim() !== '')
-      const filteredObj = {}
-      filled.forEach((val, idx) => { filteredObj[String(idx + 1)] = val })
-      multivalueExtendedProperties[numericId] = Object.keys(filteredObj).length > 0 ? filteredObj : { '1': '' }
+      if (Object.keys(valuesObj).length === 0) valuesObj['1'] = ''
+      multivalueExtendedProperties[numericId] = valuesObj
     } else {
       const prevSingle = prevMap[formDataKey] ?? prevMap[propId]
       const currVal = raw != null ? norm(raw, dt) : (prevSingle != null ? norm(prevSingle, dt) : '')

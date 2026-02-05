@@ -11,3 +11,8 @@ api_responses/
 # Logs
 logs/
 *.log
+
+# case studies
+on_prod/
+should_behaviour/
+is_behaviour/
