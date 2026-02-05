@@ -591,7 +591,9 @@ export default {
           catPropsArr: this.categoryProperties,
           metaIdx: this.metaIdx
         })
-        const payload = buildO2mPayload({ sourceProperties })
+        // Default source system (required for property mapping): /dms/r/{repositoryId}/source
+        const sourceId = this.repoId ? `/dms/r/${encodeURIComponent(this.repoId)}/source` : ''
+        const payload = buildO2mPayload({ sourceProperties, sourceId })
         const result = await putO2mUpdate({
           base: this.base,
           repoId: this.repoId,
