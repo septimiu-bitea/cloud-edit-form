@@ -125,6 +125,13 @@ export function createApi ({ base, locale = 'en', apiKey, onPremise = false } = 
     return r.json
   }
 
+  /** GET lock token for document. 404 with "Lock token does not exists." means document is not locked. */
+  const getLockToken = async (baseUrl, repoId, documentId) => {
+    const url = `${baseUrl}/dms/r/${encodeURIComponent(repoId)}/o2/${encodeURIComponent(documentId)}/locktoken`
+    const r = await j(url, { headers: { Accept: 'application/json, text/plain, */*' } })
+    return { ok: r.ok, status: r.status, json: r.json, text: r.text }
+  }
+
   const validateUpdate = async (baseUrl, repoId, documentId, payload) => {
     const url = `${baseUrl}/dms/r/${encodeURIComponent(repoId)}/o2/${encodeURIComponent(documentId)}/update/validate`
     const r = await j(url, {
@@ -325,7 +332,7 @@ export function createApi ({ base, locale = 'en', apiKey, onPremise = false } = 
 
   if (onPremise) {
     return {
-      j, setTxt: () => {}, objdefs, srm, o2, validateUpdate, storedoctype,
+      j, setTxt: () => {}, objdefs, srm, o2, getLockToken, validateUpdate, storedoctype,
       category: categoryFromStoredoctype, // primary
       categories: categoriesFromStoredoctype, // fallback only
       catProps: catPropsFromStoredoctype,
@@ -345,6 +352,7 @@ export function createApi ({ base, locale = 'en', apiKey, onPremise = false } = 
     categories, // fallback only: full list
     srm,
     o2,
+    getLockToken,
     validateUpdate,
     storedoctype
   }

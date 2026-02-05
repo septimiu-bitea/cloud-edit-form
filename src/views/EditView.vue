@@ -455,9 +455,10 @@ export default {
         let hasValue = false
         
         if (meta.isMulti) {
-          // For multivalue fields, check if array has at least one non-empty value
+          // For multivalue fields, check if array has at least one non-empty value (supports keyed { key, value }[])
           if (Array.isArray(value)) {
-            hasValue = value.length > 0 && value.some(v => v != null && String(v).trim() !== '')
+            const vals = value.map(v => (v != null && typeof v === 'object' && 'value' in v) ? v.value : v)
+            hasValue = vals.length > 0 && vals.some(v => v != null && String(v).trim() !== '')
           } else if (value != null && value !== '') {
             hasValue = true
           }
@@ -558,6 +559,12 @@ export default {
           displayValue: '',
           filename: ''
         })
+
+        const lockTokenResult = await Dv.getLockToken(this.base, this.repoId, this.docId)
+        if (lockTokenResult.ok) {
+          await this.refetchDocument()
+          return
+        }
 
         const validationResult = await Dv.validateUpdate(
           this.base,

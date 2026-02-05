@@ -1,4 +1,48 @@
 /**
+ * Generate a unique key for a multivalue entry. Use a seed for stable keys (e.g. "fieldId-0").
+ * @param {string} [seed] - Optional seed for stable key (e.g. "uuid-0")
+ * @returns {string}
+ */
+export function generateMultivalueKey (seed) {
+  if (seed != null && String(seed) !== '') return `mv-${seed}`
+  return `mv-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`
+}
+
+/**
+ * Check if an item is a keyed entry { key, value }.
+ */
+export function isKeyedEntry (x) {
+  return x != null && typeof x === 'object' && 'key' in x && 'value' in x
+}
+
+/**
+ * Normalize to array of { key, value }. Accepts string[] or { key, value }[].
+ * For string[] uses stable keys when fieldId is provided: mv-{fieldId}-{index}.
+ * @param {string[]|Array<{key:string,value:string}>} raw
+ * @param {string} [fieldId] - Optional field id for stable keys on initial load
+ * @returns {Array<{key:string,value:string}>}
+ */
+export function toKeyedEntries (raw, fieldId) {
+  if (!Array.isArray(raw)) return []
+  return raw.map((item, i) => {
+    if (isKeyedEntry(item)) return { key: item.key, value: String(item.value ?? '') }
+    const value = String(item ?? '')
+    const key = fieldId != null ? generateMultivalueKey(`${fieldId}-${i}`) : generateMultivalueKey()
+    return { key, value }
+  })
+}
+
+/**
+ * Extract string values in order from keyed or plain multivalue array (for API payloads).
+ * @param {Array<{key:string,value:string}>|string[]} raw
+ * @returns {string[]}
+ */
+export function multivalueToValues (raw) {
+  if (!Array.isArray(raw)) return []
+  return raw.map(x => (isKeyedEntry(x) ? String(x.value ?? '') : String(x ?? '')))
+}
+
+/**
  * Build regex to split by delimiter (escape special chars).
  */
 export function splitRegexFor (delimiter) {

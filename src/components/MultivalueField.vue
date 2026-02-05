@@ -14,18 +14,18 @@
       <!-- Left column: chips + add input beneath -->
       <v-col cols="12" md="6" class="d-flex flex-column">
         <div class="multivalue-chips mb-2" style="min-height: 32px;">
-          <template v-if="values.length > 0">
+          <template v-if="entries.length > 0">
             <v-chip
-              v-for="(item, idx) in values"
-              :key="`chip-${idx}-${String(item)}`"
+              v-for="entry in entries"
+              :key="entry.key"
               size="small"
               variant="tonal"
               closable
-              :disabled="readonly || removingValue !== null"
+              :disabled="readonly || removingKey !== null"
               class="ma-1"
-              @click:close="(e) => handleRemove(e, item, idx)"
+              @click:close="(e) => handleRemoveByKey(e, entry.key)"
             >
-              {{ item }}
+              {{ entry.value }}
             </v-chip>
           </template>
           <span v-else-if="readonly" class="text-medium-emphasis text-body2">—</span>
@@ -72,7 +72,7 @@
               size="small"
               variant="outlined"
               color="error"
-              :disabled="values.length === 0"
+              :disabled="entries.length === 0"
               @click="onClear"
             >
             <v-icon start size="small">mdi-delete-sweep</v-icon>
@@ -122,16 +122,7 @@
 <script>
 import { t } from '@/utils/i18n'
 import { log, warn } from '@/utils/debug'
-import { parseInputLine, parsePasteText } from '@/utils/multivalueParsing'
-
-/**
- * Normalize modelValue to an array of strings (handles array or single value).
- */
-function toValues (modelValue) {
-  if (Array.isArray(modelValue)) return modelValue.map(v => String(v ?? ''))
-  if (modelValue != null && modelValue !== '') return [String(modelValue)]
-  return []
-}
+import { parseInputLine, parsePasteText, toKeyedEntries, multivalueToValues, generateMultivalueKey } from '@/utils/multivalueParsing'
 
 export default {
   name: 'MultivalueField',
@@ -182,8 +173,7 @@ export default {
       pendingInput: '',
       importDocId: '',
       importLoading: false,
-      removingValue: null, // Track which value is being removed to prevent double-clicks
-      removalTimestamp: null, // Track when removal started
+      removingKey: null, // Key of entry being removed (avoids double-delete when same value appears twice)
       snackbar: {
         show: false,
         text: '',
@@ -192,8 +182,14 @@ export default {
     }
   },
   computed: {
+    entries () {
+      const raw = this.modelValue
+      if (Array.isArray(raw)) return toKeyedEntries(raw, this.dataFieldUuid || undefined)
+      if (raw != null && raw !== '') return toKeyedEntries([String(raw)], this.dataFieldUuid)
+      return []
+    },
     values () {
-      return toValues(this.modelValue)
+      return multivalueToValues(this.entries)
     },
     hasPendingValue () {
       return (this.pendingInput ?? '').trim().length > 0
@@ -214,108 +210,46 @@ export default {
   methods: {
     t,
     removeAt (index) {
-      // Prevent concurrent removals
-      if (this.removingIndex !== null) {
-        warn(`[MultivalueField] removeAt: already removing index ${this.removingIndex}, ignoring request for index ${index}`)
+      const entries = [...this.entries]
+      if (index < 0 || index >= entries.length) {
+        warn(`[MultivalueField] removeAt: invalid index ${index}, array length ${entries.length}`)
         return
       }
-      
-      // Create a fresh copy to avoid reactivity issues
-      const current = [...this.values]
-      if (index < 0 || index >= current.length) {
-        warn(`[MultivalueField] removeAt: invalid index ${index}, array length ${current.length}`)
-        return
-      }
-      
-      // Set removing flag
-      this.removingIndex = index
-      
-      log(`[MultivalueField] removeAt(${index}): current=`, current, 'removing:', current[index])
-      const next = current.filter((_, i) => i !== index)
-      log(`[MultivalueField] removeAt(${index}): next=`, next)
-      
-      // Use nextTick to ensure the update happens after the current render cycle
-      this.$nextTick(() => {
-        this.$emit('update:modelValue', next)
-        // Clear removing flag after a short delay to allow Vue to re-render
-        setTimeout(() => {
-          this.removingIndex = null
-        }, 50)
-      })
+      this.handleRemoveByKey(null, entries[index].key)
     },
-    handleRemove (event, valueToRemove, index) {
-      // Stop event propagation immediately so one close doesn't trigger multiple chips
+    handleRemoveByKey (event, keyToRemove) {
       if (event) {
         event.preventDefault()
         event.stopPropagation()
         event.stopImmediatePropagation()
       }
-
-      const now = Date.now()
-      // Prevent concurrent removals (e.g. two chips with same value both firing close)
-      if (this.removingValue !== null) {
-        if (this.removalTimestamp != null && (now - this.removalTimestamp) < 500) {
-          warn(`[MultivalueField] handleRemove: already removing "${this.removingValue}", ignoring request for "${valueToRemove}" (${now - this.removalTimestamp}ms ago)`)
-          return
-        }
-        this.removingValue = null
-        this.removalTimestamp = null
+      if (this.removingKey !== null) {
+        warn(`[MultivalueField] handleRemoveByKey: already removing key ${this.removingKey}, ignoring ${keyToRemove}`)
+        return
       }
-
-      // Claim removal immediately so a second synchronous handleRemove (same value) returns
-      this.removingValue = valueToRemove
-      this.removalTimestamp = now
-
-      const current = [...this.values]
-
-      // Validate index if provided, otherwise find by value
-      let targetIndex = index
-      if (targetIndex === undefined || targetIndex < 0 || targetIndex >= current.length) {
-        targetIndex = current.indexOf(valueToRemove)
-        if (targetIndex === -1) {
-          warn(`[MultivalueField] handleRemove: value not found:`, valueToRemove)
-          this.removingValue = null
-          this.removalTimestamp = null
-          return
-        }
+      const current = [...this.entries]
+      const entry = current.find(e => e.key === keyToRemove)
+      if (!entry) {
+        warn(`[MultivalueField] handleRemoveByKey: key not found:`, keyToRemove)
+        return
       }
-
-      // Verify the value at the index matches
-      if (current[targetIndex] !== valueToRemove) {
-        warn(`[MultivalueField] handleRemove: value mismatch at index ${targetIndex}: expected "${valueToRemove}", got "${current[targetIndex]}"`)
-        targetIndex = current.indexOf(valueToRemove)
-        if (targetIndex === -1) {
-          warn(`[MultivalueField] handleRemove: value not found after mismatch:`, valueToRemove)
-          this.removingValue = null
-          this.removalTimestamp = null
-          return
-        }
-      }
-
-      log(`[MultivalueField] handleRemove("${valueToRemove}", idx=${targetIndex}): current=`, current)
-      const next = current.filter((_, i) => i !== targetIndex)
-      log(`[MultivalueField] handleRemove("${valueToRemove}"): next=`, next)
-
+      this.removingKey = keyToRemove
+      const next = current.filter(e => e.key !== keyToRemove)
+      log(`[MultivalueField] handleRemoveByKey("${keyToRemove}"): remaining=`, next.length)
       this.$emit('update:modelValue', next)
-
       setTimeout(() => {
-        if (this.removingValue === valueToRemove) {
-          this.removingValue = null
-          this.removalTimestamp = null
-        }
-      }, 300)
+        this.removingKey = null
+      }, 100)
     },
     removeValue (valueToRemove) {
-      // Legacy method - redirect to handleRemove
-      this.handleRemove(null, valueToRemove)
+      const entry = this.entries.find(e => e.value === valueToRemove)
+      if (entry) this.handleRemoveByKey(null, entry.key)
     },
     parseAndAdd (raw) {
-      console.log('[MultivalueField] parseAndAdd called with:', raw, 'delimiter:', this.delimiter)
       const tokens = parseInputLine(raw, this.delimiter)
-      console.log('[MultivalueField] parseInputLine returned tokens:', tokens)
       if (tokens.length === 0) return
-      const next = [...this.values, ...tokens]
-      console.log('[MultivalueField] Emitting update with values:', next)
+      const newEntries = tokens.map(v => ({ key: generateMultivalueKey(), value: String(v ?? '') }))
+      const next = [...this.entries, ...newEntries]
       this.$emit('update:modelValue', next)
     },
     commitAdd () {
@@ -335,7 +269,8 @@ export default {
           this.showSnackbar(this.t(this.currentLocale, 'noValuesInClipboard'), 'info')
           return
         }
-        const next = [...this.values, ...tokens]
+        const newEntries = tokens.map(v => ({ key: generateMultivalueKey(), value: String(v ?? '') }))
+        const next = [...this.entries, ...newEntries]
         this.$emit('update:modelValue', next)
         this.showSnackbar(this.t(this.currentLocale, 'pastedNValues', tokens.length), 'success')
       }).catch((err) => {
@@ -352,7 +287,8 @@ export default {
       this.importLoading = true
       this.importFromDoc(docId)
         .then((arr) => {
-          const next = Array.isArray(arr) ? arr.map(v => String(v ?? '')) : []
+          const values = Array.isArray(arr) ? arr.map(v => String(v ?? '')) : []
+          const next = values.map((v, i) => ({ key: generateMultivalueKey(`${this.dataFieldUuid || 'import'}-${i}`), value: v }))
           this.$emit('update:modelValue', next)
           this.importDocId = ''
           this.showSnackbar(next.length ? this.t(this.currentLocale, 'importedNValues', next.length) : this.t(this.currentLocale, 'noValuesInDocument'), next.length ? 'success' : 'info')

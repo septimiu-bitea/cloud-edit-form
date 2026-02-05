@@ -3,6 +3,7 @@
  * Components pass formData, prevMap, metaIdx; this module returns payloads or performs fetch.
  */
 import { getNumericIdFromUuid } from '@/utils/idMapping'
+import { multivalueToValues } from '@/utils/multivalueParsing'
 import { coerceValueForType } from '@/utils/valueCoercion'
 import { buildO2ValueIndex, buildSrmValueIndex } from '@/utils/valueExtraction'
 
@@ -77,7 +78,7 @@ export function makePrevMap (o2json, srmItem, catPropsArr = [], idMap = {}, form
       }
       if (!Array.isArray(arr) && formData && formData[uuid] != null) {
         const raw = formData[uuid]
-        if (Array.isArray(raw)) arr = raw
+        if (Array.isArray(raw)) arr = multivalueToValues(raw)
         else if (typeof raw === 'string' && /[;,|]/.test(raw)) arr = raw.split(/[;,|]/).map(s => s.trim()).filter(Boolean)
         else if (raw != null && raw !== '') arr = [raw]
       }
@@ -194,7 +195,7 @@ export function buildValidationPayload ({
   const norm = (v, dt) => (coerceValueForType(v, dt) == null ? '' : String(coerceValueForType(v, dt))).trim()
   const normalizeMulti = (raw, dt) => {
     let arr
-    if (Array.isArray(raw)) arr = raw.slice()
+    if (Array.isArray(raw)) arr = multivalueToValues(raw)
     else if (raw == null || raw === '') arr = []
     else if (typeof raw === 'string' && VALIDATION_SEP_RE.test(raw)) arr = raw.split(VALIDATION_SEP_RE).map(s => s.trim())
     else arr = [raw]
@@ -242,9 +243,8 @@ export function buildValidationPayload ({
       }
       if (!prevSlotKeys || prevSlotKeys.length === 0) {
         const prevVal = prevMap[formDataKey] ?? prevMap[propId]
-        prevArr = Array.isArray(prevVal)
-          ? prevVal.map(v => norm(v, dt)).filter(v => v !== '')
-          : []
+        const prevVals = Array.isArray(prevVal) ? multivalueToValues(prevVal) : []
+        prevArr = prevVals.map(v => norm(v, dt)).filter(v => v !== '')
         prevSlotKeys = prevArr.map((_, idx) => String(idx + 1))
       }
       const valuesObj = {}
@@ -364,17 +364,19 @@ export function extractValuesFromValidationResponse (validationResponse, { idMap
     const arr = Object.keys(valuesObj)
       .sort((a, b) => Number(a) - Number(b))
       .map(key => (valuesObj[key] != null ? String(valuesObj[key]) : ''))
+    let coercedArr
     if (catPropsArr?.length) {
       const prop = catPropsArr.find(p => String(p?.id) === uuid)
       if (prop) {
         const dataType = String(prop?.dataType || 'STRING').toUpperCase()
-        values[uuid] = arr.map(v => (v === '' || v == null ? '' : coerceValueForType(v, dataType)))
+        coercedArr = arr.map(v => (v === '' || v == null ? '' : coerceValueForType(v, dataType)))
       } else {
-        values[uuid] = arr
+        coercedArr = arr
       }
     } else {
-      values[uuid] = arr
+      coercedArr = arr
     }
+    values[uuid] = coercedArr.map((v, i) => ({ key: `mv-${uuid}-${i}`, value: v }))
   }
   return values
 }

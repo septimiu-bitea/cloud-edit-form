@@ -3,6 +3,7 @@
  */
 import { coerceValueForType } from './valueCoercion.js'
 import { getNumericIdFromUuid } from './idMapping.js'
+import { toKeyedEntries } from './multivalueParsing.js'
 import { log, dbgTable } from './debug.js'
 
 export function buildSrmValueIndex (srmItem, { extraAliases = {} } = {}) {
@@ -213,7 +214,7 @@ export function buildInitialValuesFromO2 (o2Response, { idMap = {}, categoryProp
       const key = p?.uuid || resolveKey(id) || id
       if (!key) return
       const arr = toMultivalueArray(p?.values || p)
-      if (arr.length > 0 || multivalueUuids.has(key)) initialValues[key] = arr
+      if (arr.length > 0 || multivalueUuids.has(key)) initialValues[key] = toKeyedEntries(arr, key)
     })
     const mvep = o2Response?.multivalueExtendedProperties
     if (mvep && typeof mvep === 'object' && !Array.isArray(mvep)) {
@@ -222,7 +223,7 @@ export function buildInitialValuesFromO2 (o2Response, { idMap = {}, categoryProp
         if (!key) continue
         if (key in initialValues) continue
         const arr = toMultivalueArray(valuesObj)
-        if (arr.length > 0 || multivalueUuids.has(key)) initialValues[key] = arr
+        if (arr.length > 0 || multivalueUuids.has(key)) initialValues[key] = toKeyedEntries(arr, key)
       }
     }
     const ext = o2Response?.extendedProperties
@@ -234,13 +235,13 @@ export function buildInitialValuesFromO2 (o2Response, { idMap = {}, categoryProp
           // Known multivalue prop: value might be slot map or array (if not in multivalueExtendedProperties)
           if (!(key in initialValues)) {
             const arr = toMultivalueArray(val)
-            initialValues[key] = arr
+            initialValues[key] = toKeyedEntries(arr, key)
           }
         } else if (val != null && val !== '' && typeof val !== 'object') {
           initialValues[key] = val
         } else if (val != null && typeof val === 'object' && !Array.isArray(val) && isSlotMap(val)) {
           // Slot map in extendedProperties (some on-premise APIs put multivalue here)
-          initialValues[key] = slotMapToArray(val)
+          initialValues[key] = toKeyedEntries(slotMapToArray(val), key)
         }
       }
     }
@@ -262,7 +263,7 @@ export function buildInitialValuesFromO2 (o2Response, { idMap = {}, categoryProp
       const uuid = p?.uuid || (idMap[id] || id)
       const valuesObj = p?.values || {}
       const arr = slotMapToArray(valuesObj)
-      if (uuid) initialValues[uuid] = arr
+      if (uuid) initialValues[uuid] = toKeyedEntries(arr, uuid)
     })
     const obj = Array.isArray(o2Response?.objectProperties) ? o2Response.objectProperties : []
     obj.forEach(p => {
