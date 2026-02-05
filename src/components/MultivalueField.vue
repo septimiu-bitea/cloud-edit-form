@@ -244,63 +244,61 @@ export default {
       })
     },
     handleRemove (event, valueToRemove, index) {
-      // Stop event propagation immediately
+      // Stop event propagation immediately so one close doesn't trigger multiple chips
       if (event) {
         event.preventDefault()
         event.stopPropagation()
         event.stopImmediatePropagation()
       }
-      
-      // Prevent concurrent removals - check both value and timestamp
+
       const now = Date.now()
+      // Prevent concurrent removals (e.g. two chips with same value both firing close)
       if (this.removingValue !== null) {
-        // If removal was recent (within 500ms), ignore this request
-        if (this.removalTimestamp && (now - this.removalTimestamp) < 500) {
+        if (this.removalTimestamp != null && (now - this.removalTimestamp) < 500) {
           warn(`[MultivalueField] handleRemove: already removing "${this.removingValue}", ignoring request for "${valueToRemove}" (${now - this.removalTimestamp}ms ago)`)
           return
         }
-        // If it's been a while, clear the flag (might be stale)
         this.removingValue = null
         this.removalTimestamp = null
       }
-      
+
+      // Claim removal immediately so a second synchronous handleRemove (same value) returns
+      this.removingValue = valueToRemove
+      this.removalTimestamp = now
+
       const current = [...this.values]
-      
+
       // Validate index if provided, otherwise find by value
       let targetIndex = index
       if (targetIndex === undefined || targetIndex < 0 || targetIndex >= current.length) {
         targetIndex = current.indexOf(valueToRemove)
         if (targetIndex === -1) {
           warn(`[MultivalueField] handleRemove: value not found:`, valueToRemove)
+          this.removingValue = null
+          this.removalTimestamp = null
           return
         }
       }
-      
+
       // Verify the value at the index matches
       if (current[targetIndex] !== valueToRemove) {
         warn(`[MultivalueField] handleRemove: value mismatch at index ${targetIndex}: expected "${valueToRemove}", got "${current[targetIndex]}"`)
-        // Try to find by value instead
         targetIndex = current.indexOf(valueToRemove)
         if (targetIndex === -1) {
           warn(`[MultivalueField] handleRemove: value not found after mismatch:`, valueToRemove)
+          this.removingValue = null
+          this.removalTimestamp = null
           return
         }
       }
-      
-      // Set removing flags
-      this.removingValue = valueToRemove
-      this.removalTimestamp = now
-      
+
       log(`[MultivalueField] handleRemove("${valueToRemove}", idx=${targetIndex}): current=`, current)
-      const next = current.filter((v, i) => i !== targetIndex)
+      const next = current.filter((_, i) => i !== targetIndex)
       log(`[MultivalueField] handleRemove("${valueToRemove}"): next=`, next)
-      
-      // Emit immediately
+
       this.$emit('update:modelValue', next)
-      
-      // Clear removing flag after a delay to allow Vue to re-render
+
       setTimeout(() => {
-        // Only clear if we're still removing the same value (not a new removal)
         if (this.removingValue === valueToRemove) {
           this.removingValue = null
           this.removalTimestamp = null

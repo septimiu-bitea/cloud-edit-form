@@ -14,6 +14,8 @@ var ON_PREMISE = true;
 var REPO_ID = null;
 /** Enable debug logging in the Vue app (console.log, console.warn, etc.). */
 var DEBUG = false;
+/** When true, required fields can be bypassed on save (still marked invalid in UI; validation/save API is still called). */
+var ALLOW_BYPASS_REQUIRED_FIELDS = false;
 /** Auto-trigger: set to true to automatically call formInit when Form.io is detected. */
 var AUTO_TRIGGER = true;
 // --- End config ---
@@ -74,7 +76,8 @@ var vueLoaderFormInit = function (form, data) {
     mountEl: mountEl,
     onPremise: !!ON_PREMISE,
     repoId: REPO_ID || null,
-    debug: !!DEBUG
+    debug: !!DEBUG,
+    allowBypassRequiredFields: !!ALLOW_BYPASS_REQUIRED_FIELDS
   };
   if (typeof console !== 'undefined') console.log('[vue-loader] context set, loading script:', BUNDLE_URL);
 

@@ -9,7 +9,7 @@ No Form.io, no validation, no iframe. Use this when the host should only load th
 
 ## File
 
-- **loading.js** – Standard loader (use this always). Config at the top (BUNDLE_URL, BUNDLE_MOUNT_SELECTOR, ON_PREMISE, REPO_ID) and `window.formInit`. Load this one script after the main app.
+- **loading.js** – Standard loader (use this always). Config at the top (BUNDLE_URL, BUNDLE_MOUNT_SELECTOR, ON_PREMISE, REPO_ID, ALLOW_BYPASS_REQUIRED_FIELDS) and `window.formInit`. Load this one script after the main app.
 
 ## Setup
 
@@ -21,6 +21,7 @@ No Form.io, no validation, no iframe. Use this when the host should only load th
    var BUNDLE_MOUNT_SELECTOR = '#main-container';
    var ON_PREMISE = false;
    var REPO_ID = null;
+   var ALLOW_BYPASS_REQUIRED_FIELDS = false;  // true = allow save even when required fields are empty (still marked in UI)
    ```
    If the selector matches an existing element (e.g. `#main-container`), the loader clears it and mounts the Vue app there. Otherwise it creates a div with that id.
 

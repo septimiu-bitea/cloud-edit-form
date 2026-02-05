@@ -14,6 +14,7 @@ let context = typeof window !== 'undefined' ? window.__formInitContext : null
 const baseUrl = (import.meta.env.VITE_BASE_URL || '').trim()
 const docId = (import.meta.env.VITE_DOCUMENT_ID || '').trim()
 const onPremise = import.meta.env.VITE_ON_PREMISE === 'true' || import.meta.env.VITE_ON_PREMISE === '1'
+const allowBypassRequiredFields = import.meta.env.VITE_ALLOW_BYPASS_REQUIRED_FIELDS === 'true' || import.meta.env.VITE_ALLOW_BYPASS_REQUIRED_FIELDS === '1'
 if (!context && import.meta.env.DEV && baseUrl) {
   context = {
     base: '/api', // proxy in vite.config.js forwards /api -> VITE_BASE_URL
@@ -21,14 +22,16 @@ if (!context && import.meta.env.DEV && baseUrl) {
     data: docId ? { docId } : {},
     mountEl: null,
     onPremise: onPremise,
-    repoId: import.meta.env.VITE_REPO_ID || null
+    repoId: import.meta.env.VITE_REPO_ID || null,
+    allowBypassRequiredFields: allowBypassRequiredFields
   }
   if (typeof window !== 'undefined') window.__formInitContext = context
   log('[vue-app] Mock context from .env.local:', {
     base: context.base + ' -> ' + baseUrl,
     docId: context.data.docId || '(none)',
     onPremise: context.onPremise,
-    repoId: context.repoId || '(auto-detect)'
+    repoId: context.repoId || '(auto-detect)',
+    allowBypassRequiredFields: context.allowBypassRequiredFields
   })
 } else if (!context && import.meta.env.DEV) {
   log('[vue-app] Standalone: no mock context. Set VITE_BASE_URL in vue-app/.env.local and restart: npm run dev')

@@ -139,6 +139,10 @@ export default {
     }
   },
   computed: {
+    /** When true, required fields can be bypassed (still marked invalid) but save/validation API is allowed. When false, save is blocked until required fields are filled. */
+    allowBypassRequiredFields () {
+      return !!this.formInitContext?.allowBypassRequiredFields
+    },
     categoryProperties () {
       return this.raw.categoryProperties || []
     },
@@ -484,8 +488,10 @@ export default {
     async onSave () {
       if (this.saveLoading || !this.loaded) return
       
-      // Validate required fields before saving
-      if (!this.validateRequiredFields()) {
+      // Always run required-field validation so invalid fields stay marked in the UI
+      const requiredValid = this.validateRequiredFields()
+      // Unless bypass is allowed, block save when required fields are missing
+      if (!requiredValid && !this.allowBypassRequiredFields) {
         const requiredCount = this.invalidFields.length
         const message = requiredCount === 1
           ? this.t(this.locale, 'requiredFieldMissing') || 'Please fill in the required field.'
