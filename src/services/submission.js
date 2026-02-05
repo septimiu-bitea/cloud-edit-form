@@ -181,25 +181,29 @@ export function buildValidationPayload ({
       }))
 
   for (const prop of propsToProcess) {
-    const uuid = String(prop?.id ?? '')
-    if (!uuid) continue
-    const meta = metaIdx?.get?.(uuid) || {
-      uuid,
-      numericId: getNumericIdFromUuid(idMap, uuid),
+    const propId = String(prop?.id ?? '')
+    if (!propId) continue
+    // Form data is keyed by UUID: CategoryFormView uses resolveUuid(prop.id) = idMap[prop.id] || prop.id
+    const formDataKey = (idMap && idMap[propId]) ? idMap[propId] : propId
+    const meta = metaIdx?.get?.(formDataKey) || metaIdx?.get?.(propId) || {
+      uuid: formDataKey,
+      numericId: getNumericIdFromUuid(idMap, formDataKey) || getNumericIdFromUuid(idMap, propId),
       dataType: String(prop?.dataType || 'STRING').toUpperCase(),
       isMulti: !!prop?.isMultiValue,
       readOnly: !!prop?.isSystemProperty || !!prop?.readOnly
     }
     if (meta.readOnly) continue
-    const numericId = meta.numericId || getNumericIdFromUuid(idMap, uuid)
+    // numericId for API: from meta, or resolve UUID→numeric, or use propId when it is already numeric (on-premise)
+    const numericId = meta.numericId || getNumericIdFromUuid(idMap, formDataKey) || getNumericIdFromUuid(idMap, propId) || (/^\d+$/.test(propId) ? propId : null)
     if (!numericId) continue
     const dt = meta.dataType
-    const raw = formData[uuid]
+    const raw = formData[formDataKey] ?? formData[propId]
 
     if (meta.isMulti) {
       const curr = normalizeMulti(raw, dt)
-      const prevArr = Array.isArray(prevMap[uuid])
-        ? prevMap[uuid].map(v => norm(v, dt)).filter(v => v !== '')
+      const prevVal = prevMap[formDataKey] ?? prevMap[propId]
+      const prevArr = Array.isArray(prevVal)
+        ? prevVal.map(v => norm(v, dt)).filter(v => v !== '')
         : []
       const valuesObj = {}
       const remaining = curr.slice()
@@ -226,7 +230,8 @@ export function buildValidationPayload ({
       if (Object.keys(valuesObj).length === 0) valuesObj['1'] = ''
       multivalueExtendedProperties[numericId] = valuesObj
     } else {
-      const currVal = raw != null ? norm(raw, dt) : (prevMap[uuid] != null ? norm(prevMap[uuid], dt) : '')
+      const prevSingle = prevMap[formDataKey] ?? prevMap[propId]
+      const currVal = raw != null ? norm(raw, dt) : (prevSingle != null ? norm(prevSingle, dt) : '')
       extendedProperties[numericId] = currVal
     }
   }

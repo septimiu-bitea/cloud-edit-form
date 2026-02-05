@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Validation Payload Tests</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 800px; margin: 2rem auto; padding: 0 1rem; }
+    h1 { margin-top: 0; }
+    .config-section { background: #f5f5f5; padding: 1rem; border-radius: 6px; margin-bottom: 1rem; }
+    .config-section h2 { margin-top: 0; font-size: 1rem; color: #555; }
+    label { display: block; margin-bottom: 0.25rem; font-size: 0.9rem; color: #555; }
+    input, select { width: 100%; padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px; margin-bottom: 0.75rem; box-sizing: border-box; }
+    .results { white-space: pre-wrap; font-family: ui-monospace, monospace; font-size: 14px; background: #f5f5f5; padding: 1rem; border-radius: 6px; margin-top: 1rem; }
+    .pass { color: #2e7d32; }
+    .fail { color: #c62828; }
+    button { padding: 0.5rem 1rem; font-size: 1rem; cursor: pointer; margin-right: 0.5rem; margin-top: 0.5rem; }
+    .info { background: #e3f2fd; padding: 0.75rem; border-radius: 4px; margin-bottom: 1rem; font-size: 0.9rem; }
+    .payload-section .payload-json { max-height: 60vh; overflow: auto; }
+  </style>
+</head>
+<body>
+  <h1>Validation Payload Tests</h1>
+  <p class="info">Tests for <code>buildValidationPayload</code> (POST /o2/{documentId}/update/validate). Unit tests always run. The <strong>integration test</strong> fetches real API data and calls the validate endpoint when config is set and “Skip API calls” is unchecked.</p>
+
+  <div class="config-section">
+    <h2>Test config (for integration test)</h2>
+    <label for="baseUrl">Base URL:</label>
+    <input type="text" id="baseUrl" placeholder="https://your-instance.d-velop.cloud">
+    <label for="apiKey">API Key (optional):</label>
+    <input type="password" id="apiKey" placeholder="Leave empty for cookie auth">
+    <label for="repoId">Repository ID:</label>
+    <input type="text" id="repoId" placeholder="Repo UUID">
+    <label for="documentId">Document ID:</label>
+    <input type="text" id="documentId" placeholder="e.g. F600000193">
+    <label for="onPremise">On-Premise:</label>
+    <select id="onPremise">
+      <option value="">Test both</option>
+      <option value="false">Cloud only</option>
+      <option value="true">On-Premise only</option>
+    </select>
+    <label>
+      <input type="checkbox" id="skipApiCalls" checked style="width: auto; margin-right: 8px;">
+      Skip API calls (unit tests only)
+    </label>
+  </div>
+
+  <button type="button" id="run">Run tests</button>
+  <div class="results" id="results"></div>
+  <div class="payload-section" id="payloadSection" style="display: none;">
+    <h2 style="font-size: 1rem; margin-top: 1.5rem; margin-bottom: 0.5rem;">Payload (integration test)</h2>
+    <pre class="results payload-json" id="payloadJson"></pre>
+  </div>
+
+  <script type="module">
+    const resultsEl = document.getElementById('results')
+    const runBtn = document.getElementById('run')
+
+    function getConfigFromForm() {
+      return {
+        baseUrl: document.getElementById('baseUrl').value.trim(),
+        apiKey: document.getElementById('apiKey').value || null,
+        repoId: document.getElementById('repoId').value.trim(),
+        documentId: document.getElementById('documentId').value.trim(),
+        onPremise: (() => { const v = document.getElementById('onPremise').value; return v === 'true' ? true : v === 'false' ? false : null })(),
+        skipApiCalls: document.getElementById('skipApiCalls').checked
+      }
+    }
+
+    function setFormFromConfig(config) {
+      if (!config) return
+      if (config.baseUrl) document.getElementById('baseUrl').value = config.baseUrl
+      if (config.apiKey != null) document.getElementById('apiKey').value = config.apiKey || ''
+      if (config.repoId) document.getElementById('repoId').value = config.repoId
+      if (config.documentId) document.getElementById('documentId').value = config.documentId
+      if (config.onPremise != null && config.onPremise !== undefined) document.getElementById('onPremise').value = config.onPremise === true ? 'true' : config.onPremise === false ? 'false' : ''
+      if (config.skipApiCalls != null) document.getElementById('skipApiCalls').checked = config.skipApiCalls
+    }
+
+    async function loadConfigFile() {
+      try {
+        const m = await import('../test.config.js?t=' + Date.now())
+        const config = m.TEST_CONFIG || m.default || m
+        if (config && (config.baseUrl || config.repoId)) {
+          setFormFromConfig(config)
+          return config
+        }
+      } catch (e) {
+        // ignore
+      }
+      return null
+    }
+
+    async function loadAndRun() {
+      window.TEST_CONFIG = getConfigFromForm()
+      const module = await import('./validationPayload.test.js')
+      window.runValidationPayloadTests = module.runTests
+      return module.runTests()
+    }
+
+    function showPayload() {
+      const section = document.getElementById('payloadSection')
+      const pre = document.getElementById('payloadJson')
+      const payload = typeof window !== 'undefined' && window.__lastValidationPayload
+      if (payload) {
+        section.style.display = 'block'
+        pre.textContent = JSON.stringify(payload, null, 2)
+      } else {
+        section.style.display = 'none'
+      }
+    }
+
+    async function showResults() {
+      resultsEl.textContent = 'Running...'
+      runBtn.disabled = true
+      if (typeof window !== 'undefined') window.__lastValidationPayload = null
+      document.getElementById('payloadSection').style.display = 'none'
+      const origLog = console.log
+      const origError = console.error
+      const buf = []
+      console.log = (...args) => { buf.push(args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ')) }
+      console.error = (...args) => { buf.push('❌ ' + args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ')) }
+      try {
+        const { passed, failed, total } = await loadAndRun()
+        console.log = origLog
+        console.error = origError
+        resultsEl.textContent = buf.join('\n') + '\n\n' + (failed ? `❌ ${failed} failed` : '✅ All passed') + ` (${passed}/${total})`
+        resultsEl.classList.toggle('fail', failed > 0)
+        resultsEl.classList.toggle('pass', failed === 0)
+        showPayload()
+      } catch (err) {
+        console.log = origLog
+        console.error = origError
+        resultsEl.textContent = buf.join('\n') + '\n\nError: ' + err.message
+        resultsEl.classList.add('fail')
+        showPayload()
+      }
+      runBtn.disabled = false
+    }
+
+    runBtn.addEventListener('click', showResults)
+
+    async function init() {
+      await loadConfigFile()
+      showResults()
+    }
+    init()
+  </script>
+</body>
+</html>

@@ -1,4 +1,26 @@
-# DMS Properties Tests
+# Tests
+
+## Validation Payload Tests (`validationPayload.test.js`)
+
+Tests for `buildValidationPayload` (payload for `POST /o2/{documentId}/update/validate`).
+
+**Run in browser** (uses Vite `@` alias):
+
+1. `npm run dev`
+2. Open **http://localhost:5173/tests/validation-payload.html** — tests run automatically.
+3. To run the **integration test** with real API data: either copy `test.config.example.js` to `test.config.js` and set `baseUrl`, `repoId`, `documentId`, and `skipApiCalls: false`, or fill the form on the validation-payload page and uncheck "Skip API calls". The integration test will fetch SRM, O2, category properties, build the payload from real form data, and call the validate endpoint.
+4. On that same page you can re-run with `window.runValidationPayloadTests()` in the console.
+
+Covers:
+- Form data keyed by **UUID** (on-premise: `idMap[propId]`) is included in `extendedProperties` / `multivalueExtendedProperties`
+- Form data keyed by numeric `propId` fallback
+- Read-only properties are skipped
+- `systemProperties` from `srmItem`, `storeObject` shape, `eTag`/`lockTokenUrl` from `o2Response`
+- PrevMap fallback for single-value when formData is empty
+
+---
+
+## DMS Properties Tests (`dmsProperties.test.js`)
 
 Tests for verifying that `dmsProperties` values are correctly populated in form fields.
 

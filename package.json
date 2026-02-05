@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "test:dmsProperties": "node tests/dmsProperties.test.js || echo 'Run in browser: npm run dev, then open console and run: window.runDmsPropertiesTests()'",
     "test:multivalueParsing": "node tests/multivalueParsing.test.js || echo 'Run in browser: npm run dev, then open console and run: window.runMultivalueParsingTests()'",
+    "test:validationPayload": "echo 'Run in browser: npm run dev, then open http://localhost:5173/tests/validation-payload.html'",
     "test": "npm run test:dmsProperties"
   },
   "dependencies": {
