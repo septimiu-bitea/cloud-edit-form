@@ -1,7 +1,9 @@
 // DEBUG flag: comes from scripts/loading.js via window.__formInitContext.debug (when loaded by host),
 // or from Vite dev mode (import.meta.env.DEV) for local development.
 // When loaded by the host, __formInitContext.debug overrides env vars.
-const DEBUG = (typeof window !== 'undefined' && window.__formInitContext?.debug === true) ||
+// VITE_LOG_FETCH=true enables all logs (including API fetch logs) regardless of other flags.
+const DEBUG = (import.meta.env?.VITE_LOG_FETCH === 'true' || import.meta.env?.VITE_LOG_FETCH === '1') ||
+  (typeof window !== 'undefined' && window.__formInitContext?.debug === true) ||
   (import.meta.env?.DEV ?? false)
 
 export function log (...args) {

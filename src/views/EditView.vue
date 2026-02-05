@@ -42,7 +42,9 @@
                 :current-locale="locale"
                 delimiter=";"
                 :fetch-property-values-from-doc="fetchPropertyValuesFromDoc"
+                :invalid-fields="invalidFields"
                 @submit="onSave"
+                @field-updated="onFieldUpdated"
               />
             </div>
           </v-tabs-window-item>
@@ -81,9 +83,9 @@ import {
   putO2mUpdate
 } from '@/services/submission'
 import { resolveDocIdFromProcess } from '@/utils/docId'
-import { mapIdtoUniqueId, getNumericIdFromUuid } from '@/utils/idMapping'
-import { categoryOnlyProperties as filterCategoryOnly } from '@/utils/systemProperties'
-import { buildO2ValueIndex, buildIndexFromDmsProperties, buildInitialValuesFromIndex, extractValuesForUuidFromO2 } from '@/utils/valueExtraction'
+import { mapIdtoUniqueId, idToUniqueIdFromSrm, getNumericIdFromUuid } from '@/utils/idMapping'
+import { categoryOnlyProperties as filterCategoryOnly, buildRequiredFromCategoryPropertyRefs } from '@/utils/systemProperties'
+import { buildO2ValueIndex, buildIndexFromDmsProperties, buildInitialValuesFromIndex, buildInitialValuesFromO2, extractValuesForUuidFromO2 } from '@/utils/valueExtraction'
 import { t } from '@/utils/i18n'
 import { log, error } from '@/utils/debug'
 
@@ -91,7 +93,8 @@ export default {
   name: 'EditView',
   components: { CategoryFormView, SystemPropertiesView },
   inject: {
-    formInitContext: { default: null }
+    formInitContext: { default: null },
+    rawFetchResponses: { default: null }
   },
   data () {
     return {
@@ -112,30 +115,37 @@ export default {
       locale: 'en',
       repoId: '',
       docId: '',
-      categoryId: '',
-      // Raw API Responses (needed for save operations)
+      /** Category id in both forms; use .simpleId or .uniqueId depending on API/context. */
+      categoryId: { simpleId: '', uniqueId: '' },
+      onPremise: false,
+      // Raw API responses (used for form state, save, and branching)
       raw: {
         srmItem: null,
         o2Response: null,
+        category: null, // single category GET .../categories/{id}
         categoryProperties: [],
         objectDefinitions: null
       },
-      // Mappings
       idMap: {},
       metaIdx: null,
       // Form State (single source of truth)
       formData: {},
-      previousValues: {}
+      previousValues: {},
+      // Validation state (array of UUIDs for invalid fields)
+      invalidFields: []
     }
   },
   computed: {
-    // Normalized category properties (computed from raw)
     categoryProperties () {
       return this.raw.categoryProperties || []
     },
     systemPropertiesList () {
-      const arr = this.raw.o2Response?.systemProperties
-      return Array.isArray(arr) ? arr : []
+      const o2 = this.raw.o2Response
+      const sp = o2?.systemProperties
+      if (Array.isArray(sp)) return sp
+      if (sp && typeof sp === 'object')
+        return Object.entries(sp).map(([id, value]) => ({ id, value, displayValue: value }))
+      return []
     },
     categoryOnlyProperties () {
       return filterCategoryOnly(this.categoryProperties)
@@ -192,34 +202,131 @@ export default {
       // Store raw SRM response
       this.raw.srmItem = firstItem
 
-      // Normalize category ID: SRM can return sourceCategories[0] as object; extract string ID (match sections/13-entry-point.js)
+      // Normalize category ID: SRM can return sourceCategories[0] as object; extract simpleId and uniqueId
       const c3 = firstItem?.sourceCategories?.[0] ?? firstItem?.category
-      let catId = ''
+      const uuidLike = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+      let simpleId = ''
+      let uniqueId = ''
       if (typeof c3 === 'string' || typeof c3 === 'number') {
-        catId = String(c3)
+        const s = String(c3).trim()
+        if (uuidLike.test(s)) uniqueId = s
+        else simpleId = s
       } else if (c3 && typeof c3 === 'object') {
-        const raw = c3.id ?? c3.categoryId ?? c3.uuid ?? c3.uniqueId ?? c3.key ?? ''
-        catId = typeof raw === 'string' || typeof raw === 'number' ? String(raw) : ''
+        simpleId = String(c3.id ?? c3.categoryId ?? '').trim()
+        uniqueId = String(c3.uuid ?? c3.uniqueId ?? '').trim()
+        if (!simpleId && !uniqueId) {
+          const fallback = c3.key ?? ''
+          if (typeof fallback === 'string' && fallback) {
+            if (uuidLike.test(fallback)) uniqueId = fallback
+            else simpleId = fallback
+          }
+        }
       }
-      this.categoryId = (catId || '').trim()
-      if (!this.categoryId) {
+      this.categoryId = { simpleId, uniqueId }
+      const hasCategory = this.categoryId.simpleId || this.categoryId.uniqueId
+      if (!hasCategory) {
         this.error = this.t(this.locale, 'errorNoCategory')
         return
       }
+      // catProps: on-prem uses simpleId (storedoctype), cloud uses uniqueId (dmsconfig)
+      const onPrem = !!this.formInitContext?.onPremise
+      const catIdForApi = onPrem
+        ? (this.categoryId.simpleId || this.categoryId.uniqueId)
+        : (this.categoryId.uniqueId || this.categoryId.simpleId)
 
-      const [catP, o2Resp, od] = await Promise.all([
-        Dv.catProps(this.base, this.repoId, this.categoryId),
+      const [catResp, catP, o2Resp, od] = await Promise.all([
+        Dv.category(this.base, this.repoId, catIdForApi),
+        Dv.catProps(this.base, this.repoId, catIdForApi),
         Dv.o2(this.base, this.repoId, this.docId),
         Dv.objdefs(this.base, this.repoId)
       ])
 
-      const { idToUniqueId } = mapIdtoUniqueId(od?.raw ?? {})
-      this.idMap = idToUniqueId || {}
+      // Category properties response is for the active (document's) category only
+      log('[EditView] Category properties API response is for active category:', this.categoryId.simpleId || this.categoryId.uniqueId, '→', (catP.arr || []).length, 'properties')
+      
+      // Log API response structure to identify correct field name for required status
+      if (catP.arr && catP.arr.length > 0) {
+        const sampleProp = catP.arr[0]
+        const allKeys = Object.keys(sampleProp)
+        const possibleRequiredFields = allKeys.filter(k => 
+          k.toLowerCase().includes('mandatory') || 
+          k.toLowerCase().includes('required') ||
+          k.toLowerCase().includes('obligatory')
+        )
+        log('[EditView] API response - Property keys:', allKeys)
+        log('[EditView] API response - Required-related fields found:', possibleRequiredFields)
+        if (possibleRequiredFields.length > 0) {
+          possibleRequiredFields.forEach(key => {
+            log(`[EditView] API response - ${key}:`, sampleProp[key], `(type: ${typeof sampleProp[key]})`)
+          })
+        } else {
+          log('[EditView] API response - No required/mandatory field found in property object')
+          log('[EditView] API response - Full sample property:', sampleProp)
+        }
+      }
+
+      // idMap: numericId -> uuid. Prefer SRM (same on cloud and on-prem), else objdefs.
+      const fromSrm = idToUniqueIdFromSrm(srmResp)
+      const fromObjdef = mapIdtoUniqueId(od?.raw ?? {})
+      this.idMap = (fromSrm?.idToUniqueId || fromObjdef?.idToUniqueId) || {}
+      if (fromSrm?.idToUniqueId) log('[EditView] idMap from SRM:', Object.keys(this.idMap).length, 'entries')
+      else log('[EditView] idMap from objdefs:', Object.keys(this.idMap).length, 'entries')
+
+      // Fill categoryId.simpleId / uniqueId from idMap if one was missing
+      if (!this.categoryId.uniqueId && this.categoryId.simpleId && this.idMap[this.categoryId.simpleId]) {
+        this.categoryId.uniqueId = this.idMap[this.categoryId.simpleId]
+      }
+      if (!this.categoryId.simpleId && this.categoryId.uniqueId) {
+        const num = getNumericIdFromUuid(this.idMap, this.categoryId.uniqueId)
+        if (num) this.categoryId.simpleId = num
+      }
 
       // Store raw API responses
+      this.raw.category = catResp?.raw ?? catResp?.item ?? null
       this.raw.categoryProperties = catP.arr || []
+      this.onPremise = !!this.formInitContext?.onPremise
+      // Required: cloud uses category.propertyRefs; on-premise uses catProps (extendedProperties.isMandatory, already set).
+      if (!this.onPremise) {
+        const requiredByRef = buildRequiredFromCategoryPropertyRefs(this.raw.category)
+        if (Object.keys(requiredByRef).length) {
+          this.raw.categoryProperties.forEach(p => {
+            const required = requiredByRef[p.id] ?? requiredByRef[p.uuid]
+            if (required !== undefined) p.isMandatory = required
+          })
+        }
+      }
       this.raw.o2Response = o2Resp
       this.raw.objectDefinitions = od?.raw ?? null
+
+      // Send raw responses to app so data can be handled there
+      if (this.rawFetchResponses) {
+        this.rawFetchResponses.srm = srmResp
+        this.rawFetchResponses.category = this.raw.category
+        this.rawFetchResponses.categoryProperties = catP.raw
+        this.rawFetchResponses.o2 = o2Resp
+        this.rawFetchResponses.objectDefinitions = od?.raw ?? null
+        if (this.onPremise) {
+          this.rawFetchResponses.storedoctype = await Dv.storedoctype(this.base, this.repoId)
+        } else {
+          this.rawFetchResponses.storedoctype = null
+        }
+        log('[EditView] Raw fetch responses sent to app:', Object.keys(this.rawFetchResponses))
+      }
+
+      log('[EditView] Fetch complete. Mode:', this.onPremise ? 'on-premise' : 'cloud', { raw: this.raw, onPremise: this.onPremise })
+
+      // Log entire category properties response so you can point out mandatory field
+      log('[EditView] === FULL CATEGORY PROPERTIES RESPONSE (active category) ===')
+      log('[EditView] Raw API response (catP.raw):', catP.raw)
+      log('[EditView] Category properties array (43 items) - full JSON:')
+      try {
+        const fullJson = JSON.stringify(this.raw.categoryProperties, null, 2)
+        console.log('[EditView] categoryProperties JSON:\n' + fullJson)
+      } catch (e) {
+        log('[EditView] JSON.stringify failed:', e)
+        console.table(this.raw.categoryProperties)
+      }
+      log('[EditView] === END CATEGORY PROPERTIES RESPONSE ===')
 
       // Log O2 response structure for debugging
       log('[EditView] O2 response structure:', {
@@ -238,106 +345,20 @@ export default {
         objectPropertiesLength: o2Resp?.objectProperties?.length || 0
       })
       
-      // Populate formData directly from O2 response
-      // Strategy: Multivalue fields ONLY from multivalueProperties/multivalueExtendedProperties
-      //           Single-value fields from objectProperties/extendedProperties/systemProperties/SRM
-      const initialValues = {}
-      
-      // Build map of multivalue property UUIDs for quick lookup
-      const multivalueUuids = new Set()
-      this.categoryProperties.forEach(prop => {
-        if (prop?.isMultiValue) {
-          const uuid = this.idMap[prop.id] || prop.id
-          if (uuid) multivalueUuids.add(uuid)
-        }
+      // Populate formData from O2 response — single normalized path (cloud vs on-premise handled inside)
+      const { initialValues, multivalueUuids } = buildInitialValuesFromO2(o2Resp, {
+        idMap: this.idMap,
+        categoryProperties: this.categoryProperties,
+        onPremise: this.onPremise
       })
       log('[EditView] Multivalue properties:', multivalueUuids.size, 'fields')
-      
-      // Process multivalueProperties array: [{ id, uuid, values: { "1": "val1", "2": "val2" } }]
-      const mv = Array.isArray(o2Resp?.multivalueProperties) ? o2Resp.multivalueProperties : []
-      log('[EditView] multivalueProperties array:', mv.length, 'items')
-      mv.forEach((p, i) => {
-        const id = String(p?.id ?? '').trim()
-        const uuid = p?.uuid || (this.idMap[id] || id)
-        const valuesObj = p?.values || {}
-        const arr = Object.keys(valuesObj)
-          .sort((a, b) => Number(a) - Number(b))
-          .map(k => valuesObj[k])
-          .filter(v => v != null && String(v).trim() !== '')
-        if (uuid) {
-          initialValues[uuid] = arr
-          log(`[EditView] multivalueProperty[${i}]: id=${id} → uuid=${uuid}`, arr)
-        }
-      })
-      
-      // Process multivalueExtendedProperties object: { "159": { "1": "val1", "2": "val2" } }
-      const mvep = o2Resp?.multivalueExtendedProperties
-      if (mvep && typeof mvep === 'object' && !Array.isArray(mvep)) {
-        const keys = Object.keys(mvep)
-        log('[EditView] multivalueExtendedProperties object:', keys.length, 'keys')
-        for (const [id, valuesObj] of Object.entries(mvep)) {
-          const uuid = this.idMap[id] || id
-          if (!uuid || !valuesObj || typeof valuesObj !== 'object' || Array.isArray(valuesObj)) continue
-          const arr = Object.keys(valuesObj)
-            .sort((a, b) => Number(a) - Number(b))
-            .map(slot => valuesObj[slot])
-            .filter(v => v != null && String(v).trim() !== '')
-          initialValues[uuid] = arr
-          log(`[EditView] multivalueExtendedProperty: id=${id} → uuid=${uuid}`, arr)
-        }
-      }
-      
-      // Process single-value properties: objectProperties array
-      const obj = Array.isArray(o2Resp?.objectProperties) ? o2Resp.objectProperties : []
-      obj.forEach(p => {
-        const uuid = p?.uuid || (this.idMap[p?.id] || p?.id)
-        const val = p?.value ?? p?.displayValue ?? ''
-        // Skip if this is a multivalue field (already processed above)
-        if (uuid && !multivalueUuids.has(uuid) && val != null && val !== '') {
-          initialValues[uuid] = val
-        }
-      })
-      
-      // Process single-value properties: extendedProperties object (on-premise)
-      const ext = o2Resp?.extendedProperties
-      if (ext && typeof ext === 'object' && !Array.isArray(ext)) {
-        for (const [id, val] of Object.entries(ext)) {
-          // Skip slot maps (multivalue format) and null/empty values
-          if (val == null || val === '' || (typeof val === 'object' && !Array.isArray(val))) continue
-          const uuid = this.idMap[id] || id
-          // Skip if this is a multivalue field (already processed above)
-          if (uuid && !multivalueUuids.has(uuid) && !initialValues[uuid]) {
-            initialValues[uuid] = val
-          }
-        }
-      }
-      
-      // Process systemProperties array: [{ id, value }]
-      const sys = Array.isArray(o2Resp?.systemProperties) ? o2Resp.systemProperties : []
-      sys.forEach(p => {
-        const k = String(p?.id || '').trim()
-        const val = p?.displayValue ?? p?.value ?? ''
-        if (k && val != null && val !== '' && !multivalueUuids.has(k)) {
-          initialValues[k] = val
-        }
-      })
-      
-      // Process systemProperties as object (on-premise)
-      if (o2Resp?.systemProperties && typeof o2Resp.systemProperties === 'object' && !Array.isArray(o2Resp.systemProperties)) {
-        for (const [k, v] of Object.entries(o2Resp.systemProperties)) {
-          if (k && v != null && v !== '' && !multivalueUuids.has(k) && !initialValues[k]) {
-            initialValues[k] = v
-          }
-        }
-      }
-      
-      // Fallback to SRM displayProperties for single-value fields only
+
+      // Fallback: SRM displayProperties (both modes)
       const srmDp = Array.isArray(this.raw.srmItem?.displayProperties) ? this.raw.srmItem.displayProperties : []
       log('[EditView] SRM displayProperties:', srmDp.length, 'items')
       srmDp.forEach(p => {
         const uuid = this.idMap[p?.id] || p?.id
         const val = p?.displayValue ?? p?.value ?? ''
-        // Skip if multivalue field or already has value
         if (uuid && !multivalueUuids.has(uuid) && !initialValues[uuid] && val != null && val !== '') {
           initialValues[uuid] = val
         }
@@ -361,6 +382,21 @@ export default {
         this.formData
       )
       this.metaIdx = toMetaIndex(this.categoryProperties, { idMap: this.idMap })
+
+      // Log mandatory fields for this document's category only
+      const categoryLabel = this.raw.srmItem?.sourceCategories?.[0]?.displayName ?? this.raw.srmItem?.category ?? (this.categoryId.uniqueId || this.categoryId.simpleId)
+      const mandatoryFields = (this.categoryProperties || []).filter(p => p && !!p.isMandatory)
+      log('[EditView] Document category (mandatory applies only to this):', this.categoryId, categoryLabel)
+      if (mandatoryFields.length > 0) {
+        log('[EditView] Mandatory fields for this category:', mandatoryFields.length, mandatoryFields.map(p => ({
+          id: p.id,
+          uuid: this.idMap[p.id] || p.id,
+          label: p.name?.en ?? p.displayName ?? p.id
+        })))
+      } else {
+        log('[EditView] Mandatory fields for this category: none (no property has isMandatory === true)')
+      }
+
       this.loaded = true
     } catch (e) {
       this.error = e?.message || String(e)
@@ -371,8 +407,104 @@ export default {
   },
   methods: {
     t,
+    /**
+     * Clear validation error for a field when user updates it.
+     */
+    onFieldUpdated (uuid) {
+      const index = this.invalidFields.indexOf(uuid)
+      if (index > -1) {
+        this.invalidFields.splice(index, 1)
+      }
+    },
+    /**
+     * Validate required fields for this document's category only.
+     * Returns true if all mandatory fields (isMandatory === true) are filled.
+     */
+    validateRequiredFields () {
+      this.invalidFields = []
+      let isValid = true
+      
+      const filtered = this.categoryOnlyPropertiesFiltered
+      log(`[EditView] Validating required fields for category ${this.categoryId.simpleId || this.categoryId.uniqueId}. Properties: ${filtered.length}`)
+      
+      for (const prop of filtered) {
+        const uuid = this.idMap[prop.id] || prop.id
+        const meta = this.metaIdx?.get?.(uuid) || {
+          uuid,
+          isMulti: !!prop.isMultiValue,
+          readOnly: !!prop.isSystemProperty || !!prop.readOnly
+        }
+        
+        // Skip readonly fields
+        if (meta.readOnly) continue
+        
+        // Check if field is required - use isMandatory field from API response
+        const isRequired = !!prop.isMandatory
+        if (!isRequired) continue
+        log(`[EditView] Found required field: uuid=${uuid}, prop.id=${prop.id}, isMandatory=${prop.isMandatory}`)
+        
+        // Check if field has a value
+        const value = this.formData[uuid]
+        let hasValue = false
+        
+        if (meta.isMulti) {
+          // For multivalue fields, check if array has at least one non-empty value
+          if (Array.isArray(value)) {
+            hasValue = value.length > 0 && value.some(v => v != null && String(v).trim() !== '')
+          } else if (value != null && value !== '') {
+            hasValue = true
+          }
+        } else {
+          // For single-value fields, check if value is not empty
+          // Handle empty strings, null, undefined, and whitespace-only strings
+          if (value != null && value !== '') {
+            const strValue = String(value).trim()
+            hasValue = strValue.length > 0
+          }
+          // Also handle boolean false - it's a valid value
+          if (typeof value === 'boolean') {
+            hasValue = true
+          }
+        }
+        
+        if (!hasValue) {
+          this.invalidFields.push(uuid)
+          isValid = false
+          log(`[EditView] Required field missing: uuid=${uuid}, prop.id=${prop.id}, label=${prop.name?.en || prop.id}`)
+        }
+      }
+      
+      log(`[EditView] Validation result: isValid=${isValid}, invalidFields=${this.invalidFields.length}`, this.invalidFields)
+      return isValid
+    },
     async onSave () {
       if (this.saveLoading || !this.loaded) return
+      
+      // Validate required fields before saving
+      if (!this.validateRequiredFields()) {
+        const requiredCount = this.invalidFields.length
+        const message = requiredCount === 1
+          ? this.t(this.locale, 'requiredFieldMissing') || 'Please fill in the required field.'
+          : this.t(this.locale, 'requiredFieldsMissing', requiredCount) || `Please fill in ${requiredCount} required fields.`
+        this.snackbar = { show: true, text: message, color: 'error' }
+        // Scroll to first invalid field
+        this.$nextTick(() => {
+          const firstInvalidUuid = this.invalidFields[0]
+          if (firstInvalidUuid) {
+            const element = document.querySelector(`[data-field-uuid="${firstInvalidUuid}"]`)
+            if (element) {
+              element.scrollIntoView({ behavior: 'smooth', block: 'center' })
+              // Try to focus the input inside if it's a v-text-field or v-card
+              const input = element.querySelector('input') || element.querySelector('textarea')
+              if (input) {
+                setTimeout(() => input.focus(), 300)
+              }
+            }
+          }
+        })
+        return
+      }
+      
       this.saveLoading = true
       this.snackbar.show = false
       try {
@@ -399,13 +531,14 @@ export default {
           _o2Response: this.raw.o2Response,
           _srmItem: this.raw.srmItem
         }
-        const numericCatId = getNumericIdFromUuid(this.idMap, this.categoryId) || this.categoryId
+        const objectDefinitionId = this.categoryId.simpleId || getNumericIdFromUuid(this.idMap, this.categoryId.uniqueId)
+        const categoryIdForPayload = this.categoryId.uniqueId || this.categoryId.simpleId
         const validationPayload = buildValidationPayload({
           base: this.base,
           repoId: this.repoId,
           documentId: this.docId,
-          objectDefinitionId: numericCatId,
-          categoryId: this.categoryId,
+          objectDefinitionId,
+          categoryId: categoryIdForPayload,
           form: formLike,
           metaIdx: this.metaIdx,
           catPropsArr: this.categoryProperties,

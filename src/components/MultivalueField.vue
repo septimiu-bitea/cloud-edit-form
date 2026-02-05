@@ -1,6 +1,14 @@
 <template>
-  <v-card variant="outlined" class="pa-3">
-    <div class="text-subtitle-2 text-medium-emphasis mb-2">{{ label }}</div>
+  <v-card 
+    variant="outlined" 
+    class="pa-3"
+    :class="{ 'multivalue-field-error': error }"
+    :data-field-uuid="dataFieldUuid"
+  >
+    <div class="text-subtitle-2 mb-2" :class="error ? 'text-error' : 'text-medium-emphasis'">
+      {{ displayLabel }}
+      <span v-if="error" class="text-error text-caption ml-1">({{ t(currentLocale, 'fieldRequired') || 'Required' }})</span>
+    </div>
 
     <v-row dense class="multivalue-layout">
       <!-- Left column: chips + add input beneath -->
@@ -140,6 +148,14 @@ export default {
       type: Boolean,
       default: false
     },
+    required: {
+      type: Boolean,
+      default: false
+    },
+    error: {
+      type: Boolean,
+      default: false
+    },
     currentLocale: {
       type: String,
       default: 'en'
@@ -153,6 +169,11 @@ export default {
     importFromDoc: {
       type: Function,
       default: null
+    },
+    /** Optional: data attribute for field UUID (used for scrolling to invalid fields). */
+    dataFieldUuid: {
+      type: String,
+      default: ''
     }
   },
   emits: ['update:modelValue'],
@@ -182,6 +203,12 @@ export default {
     },
     addPlaceholder () {
       return this.delimiter ? this.t(this.currentLocale, 'addValuePlaceholder', this.delimiter) : this.t(this.currentLocale, 'addValuePlaceholderShort')
+    },
+    displayLabel () {
+      if (this.required && !this.readonly) {
+        return `${this.label} *`
+      }
+      return this.label
     }
   },
   methods: {
@@ -356,5 +383,9 @@ export default {
 }
 .multivalue-add-input {
   flex: 1 1 auto;
+}
+.multivalue-field-error {
+  border-color: rgb(var(--v-theme-error)) !important;
+  border-width: 2px !important;
 }
 </style>

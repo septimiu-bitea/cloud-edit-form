@@ -7,6 +7,7 @@
         cols="12"
         sm="6"
         md="4"
+        class="mt-1"
       >
         <v-text-field
           :model-value="displayValue(prop)"

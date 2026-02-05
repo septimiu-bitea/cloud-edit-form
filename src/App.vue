@@ -29,6 +29,23 @@ export default {
   inject: {
     formInitContext: { default: null }
   },
+  data () {
+    return {
+      /** Raw API response for each fetch. Populated by EditView after load; app can use this to handle data. */
+      rawFetchResponses: {
+        srm: null,
+        categoryProperties: null,
+        o2: null,
+        objectDefinitions: null,
+        storedoctype: null
+      }
+    }
+  },
+  provide () {
+    return {
+      rawFetchResponses: this.rawFetchResponses
+    }
+  },
   computed: {
     context () {
       return this.formInitContext || null

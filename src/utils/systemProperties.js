@@ -43,3 +43,25 @@ export function isSystemProperty (prop) {
 export function categoryOnlyProperties (properties) {
   return Array.isArray(properties) ? properties.filter(p => !isSystemProperty(p)) : []
 }
+
+/**
+ * Build a map propertyId -> required from category.propertyRefs (non-system only).
+ * Cloud: single-category API returns propertyRefs with "required". On-premise: category has no propertyRefs; use extendedProperties.isMandatory from catProps.
+ * @param {Object} category - Raw category response (cloud: GET .../categories/{id}; on-premise: docType from storedoctype, no propertyRefs)
+ * @returns {Object} Map of property id (string) -> boolean (required)
+ */
+export function buildRequiredFromCategoryPropertyRefs (category) {
+  const refs = category?.propertyRefs
+  if (!Array.isArray(refs)) return {}
+  const map = {}
+  for (const ref of refs) {
+    const id = ref?.id ?? ref?.propertyId ?? ref?.uuid ?? ''
+    if (!id) continue
+    if (ref.isSystemProperty === true) continue
+    const sysId = String(id).trim()
+    if (sysId && SYSTEM_PROPERTY_IDS.has(sysId)) continue
+    map[id] = !!ref.required
+    if (typeof ref.uuid === 'string' && ref.uuid !== id) map[ref.uuid] = !!ref.required
+  }
+  return map
+}

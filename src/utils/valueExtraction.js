@@ -163,6 +163,125 @@ export function buildO2ValueIndex (o2json, idMap = {}) {
 }
 
 /**
+ * Build initial form values from O2 response. Single normalized path for cloud and on-premise.
+ * @param {Object} o2Response - O2 API response (shape differs by onPremise)
+ * @param {Object} opts - { idMap, categoryProperties, onPremise }
+ * @returns {{ initialValues: Object, multivalueUuids: Set }}
+ */
+export function buildInitialValuesFromO2 (o2Response, { idMap = {}, categoryProperties = [], onPremise = false } = {}) {
+  const initialValues = Object.create(null)
+  const multivalueUuids = new Set()
+  for (const prop of categoryProperties || []) {
+    if (prop?.isMultiValue) {
+      const pid = prop.id != null ? String(prop.id) : ''
+      const uuid = (pid && idMap[pid]) || pid || (idMap[prop.id] != null ? idMap[prop.id] : null)
+      if (uuid) multivalueUuids.add(String(uuid))
+    }
+  }
+
+  const slotMapToArray = (valuesObj) =>
+    Object.keys(valuesObj)
+      .sort((a, b) => Number(a) - Number(b))
+      .map(k => valuesObj[k])
+      .filter(v => v != null && String(v).trim() !== '')
+
+  /** True if object looks like a slot map { "1": "v1", "2": "v2" } (numeric string keys). */
+  const isSlotMap = (v) =>
+    v != null && typeof v === 'object' && !Array.isArray(v) &&
+    Object.keys(v).every(k => /^\d+$/.test(String(k)))
+
+  const toMultivalueArray = (valuesObj) => {
+    if (Array.isArray(valuesObj)) {
+      return valuesObj.filter(v => v != null && String(v).trim() !== '').map(v => String(v).trim())
+    }
+    if (valuesObj && typeof valuesObj === 'object' && isSlotMap(valuesObj)) {
+      return slotMapToArray(valuesObj)
+    }
+    return []
+  }
+
+  const resolveKey = (id) => {
+    const s = id != null ? String(id) : ''
+    return (s && idMap[s]) || (s && idMap[id]) || s || null
+  }
+
+  if (onPremise) {
+    // On-premise: some APIs return multivalueProperties (array, same as cloud), others multivalueExtendedProperties (object)
+    const mvArr = Array.isArray(o2Response?.multivalueProperties) ? o2Response.multivalueProperties : []
+    mvArr.forEach(p => {
+      const id = String(p?.id ?? '').trim()
+      const key = p?.uuid || resolveKey(id) || id
+      if (!key) return
+      const arr = toMultivalueArray(p?.values || p)
+      if (arr.length > 0 || multivalueUuids.has(key)) initialValues[key] = arr
+    })
+    const mvep = o2Response?.multivalueExtendedProperties
+    if (mvep && typeof mvep === 'object' && !Array.isArray(mvep)) {
+      for (const [id, valuesObj] of Object.entries(mvep)) {
+        const key = resolveKey(id)
+        if (!key) continue
+        if (key in initialValues) continue
+        const arr = toMultivalueArray(valuesObj)
+        if (arr.length > 0 || multivalueUuids.has(key)) initialValues[key] = arr
+      }
+    }
+    const ext = o2Response?.extendedProperties
+    if (ext && typeof ext === 'object' && !Array.isArray(ext)) {
+      for (const [id, val] of Object.entries(ext)) {
+        const key = resolveKey(id)
+        if (!key) continue
+        if (multivalueUuids.has(key)) {
+          // Known multivalue prop: value might be slot map or array (if not in multivalueExtendedProperties)
+          if (!(key in initialValues)) {
+            const arr = toMultivalueArray(val)
+            initialValues[key] = arr
+          }
+        } else if (val != null && val !== '' && typeof val !== 'object') {
+          initialValues[key] = val
+        } else if (val != null && typeof val === 'object' && !Array.isArray(val) && isSlotMap(val)) {
+          // Slot map in extendedProperties (some on-premise APIs put multivalue here)
+          initialValues[key] = slotMapToArray(val)
+        }
+      }
+    }
+    const sys = o2Response?.systemProperties
+    if (sys && typeof sys === 'object' && !Array.isArray(sys)) {
+      for (const [k, v] of Object.entries(sys)) {
+        const key = resolveKey(k) || k
+        if (key && v != null && v !== '' && !multivalueUuids.has(key) && !(key in initialValues)) initialValues[key] = v
+      }
+    }
+    // Ensure every known multivalue prop has an entry (so the field renders even when empty)
+    for (const uuid of multivalueUuids) {
+      if (!(uuid in initialValues)) initialValues[uuid] = []
+    }
+  } else {
+    const mv = Array.isArray(o2Response?.multivalueProperties) ? o2Response.multivalueProperties : []
+    mv.forEach(p => {
+      const id = String(p?.id ?? '').trim()
+      const uuid = p?.uuid || (idMap[id] || id)
+      const valuesObj = p?.values || {}
+      const arr = slotMapToArray(valuesObj)
+      if (uuid) initialValues[uuid] = arr
+    })
+    const obj = Array.isArray(o2Response?.objectProperties) ? o2Response.objectProperties : []
+    obj.forEach(p => {
+      const uuid = p?.uuid || (idMap[p?.id] || p?.id)
+      const val = p?.value ?? p?.displayValue ?? ''
+      if (uuid && !multivalueUuids.has(uuid) && val != null && val !== '') initialValues[uuid] = val
+    })
+    const sys = Array.isArray(o2Response?.systemProperties) ? o2Response.systemProperties : []
+    sys.forEach(p => {
+      const k = String(p?.id || '').trim()
+      const val = p?.displayValue ?? p?.value ?? ''
+      if (k && val != null && val !== '' && !multivalueUuids.has(k)) initialValues[k] = val
+    })
+  }
+
+  return { initialValues, multivalueUuids }
+}
+
+/**
  * Build a value index from the host's data.dmsProperties (e.g. from form submission).
  * Used when the backend sends property values keyed by numeric id and property_* names.
  * Mirrors the extendedProperties handling in buildO2ValueIndex for on-premise compatibility.

@@ -494,59 +494,49 @@ async function runIntegrationTest(onPremise) {
   let catProps = catPropsResp.arr || []
   const { idToUniqueId } = mapIdtoUniqueId(objdefsResp.raw || {})
   
-  // If no properties found, try fetching categories list to find the correct format
+  // Prefer single category by id; categories list is fallback only when single returns empty
   if (catProps.length === 0 && actualCategoryId && !corsError) {
     console.log(`  ⚠️  No properties found for categoryId: ${actualCategoryId}`)
-    console.log(`  🔍 Trying to fetch categories list to find correct format...`)
+    console.log(`  🔍 Fetching single category: /dmsconfig/r/{repoId}/objectmanagement/categories/${actualCategoryId}`)
     try {
-      const categoriesResp = await Dv.categories(base, repoId)
-      const categories = categoriesResp.arr || []
-      console.log(`  📝 Found ${categories.length} categories`)
-      
-      // Try to find matching category by ID (UUID, numeric, or display name)
-      const matchingCat = categories.find(cat => 
-        cat.id === actualCategoryId ||
-        cat.id?.toLowerCase() === actualCategoryId.toLowerCase() ||
-        cat.categoryId === actualCategoryId ||
-        cat.uuid === actualCategoryId ||
-        cat.displayName?.toLowerCase() === actualCategoryId.toLowerCase()
-      )
-      
-      if (matchingCat) {
-        const foundCatId = matchingCat.id || matchingCat.categoryId || matchingCat.uuid
-        console.log(`  ✅ Found matching category: ${foundCatId} (${matchingCat.displayName || matchingCat.name})`)
+      const singleResp = await Dv.category(base, repoId, actualCategoryId)
+      const cat = singleResp.item || singleResp.raw
+      if (cat) {
+        const foundCatId = cat.id ?? cat.categoryId ?? cat.uuid ?? actualCategoryId
+        console.log(`  ✅ Got category: ${foundCatId} (${cat.displayName || cat.name || ''})`)
         actualCategoryId = foundCatId
-        // Try fetching properties with the found category ID
         const retryResp = await Dv.catProps(base, repoId, foundCatId).catch(() => ({ arr: [] }))
         catProps = retryResp.arr || []
         if (catProps.length > 0) {
           console.log(`  ✅ Successfully fetched ${catProps.length} properties with categoryId: ${foundCatId}`)
         }
       } else {
-        console.log(`  ⚠️  Category "${actualCategoryId}" not found in categories list`)
-        if (categories.length > 0) {
-          console.log(`  📝 Available categories (first 5):`, categories.slice(0, 5).map(c => ({ 
-            id: c.id, 
-            categoryId: c.categoryId,
-            uuid: c.uuid,
-            name: c.displayName || c.name 
-          })))
-          // Try using the first category as fallback for testing
+        // Fallback: fetch full categories list (e.g. if single-category endpoint not available)
+        console.log(`  🔍 Single category empty; trying categories list...`)
+        const categoriesResp = await Dv.categories(base, repoId)
+        const categories = categoriesResp.arr || []
+        const matchingCat = categories.find(c => 
+          c.id === actualCategoryId || c.id?.toLowerCase() === actualCategoryId.toLowerCase() ||
+          c.categoryId === actualCategoryId || c.uuid === actualCategoryId ||
+          c.displayName?.toLowerCase() === actualCategoryId.toLowerCase()
+        )
+        if (matchingCat) {
+          const foundCatId = matchingCat.id || matchingCat.categoryId || matchingCat.uuid
+          actualCategoryId = foundCatId
+          const retryResp = await Dv.catProps(base, repoId, foundCatId).catch(() => ({ arr: [] }))
+          catProps = retryResp.arr || []
+        } else if (categories.length > 0) {
           const firstCat = categories[0]
           const fallbackCatId = firstCat.id || firstCat.categoryId || firstCat.uuid
           if (fallbackCatId) {
-            console.log(`  💡 Trying fallback: using first category "${fallbackCatId}" (${firstCat.displayName || firstCat.name})`)
             actualCategoryId = fallbackCatId
             const fallbackResp = await Dv.catProps(base, repoId, fallbackCatId).catch(() => ({ arr: [] }))
             catProps = fallbackResp.arr || []
-            if (catProps.length > 0) {
-              console.log(`  ✅ Successfully fetched ${catProps.length} properties with fallback categoryId: ${fallbackCatId}`)
-            }
           }
         }
       }
     } catch (err) {
-      console.warn(`  ⚠️  Could not fetch categories list:`, err.message)
+      console.warn(`  ⚠️  Could not fetch category:`, err.message)
     }
   }
   

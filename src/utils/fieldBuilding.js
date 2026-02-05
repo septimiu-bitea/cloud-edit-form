@@ -25,7 +25,8 @@ export function toFieldMeta (p, { locale = 'en' } = {}) {
   const readOnly = isSystem ? true : !!p?.readOnly
   const dataSetId = p?.dataSetId || ''
   const hasValueList = !!p?.hasValueList
-  return { uuid, label, dataType, isSystem, isMulti, readOnly, dataSetId, hasValueList }
+  const isRequired = !!p?.isMandatory
+  return { uuid, label, dataType, isSystem, isMulti, readOnly, dataSetId, hasValueList, isRequired }
 }
 
 /**

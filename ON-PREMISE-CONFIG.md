@@ -94,6 +94,16 @@ VITE_TEST_ON_PREMISE=false # Test cloud only
 - O2 response: `{ extendedProperties: { "123": "value", ... } }`
 - Values automatically extracted from `extendedProperties`
 
+## Enabling fetch logs
+
+To see all API request/response logs (URLs and response keys), set in `.env.local`:
+
+```bash
+VITE_LOG_FETCH=true
+```
+
+Then restart the dev server. Every fetch (SRM, O2, category properties, objdef, storedoctype, etc.) will log `[api] fetch`, `[api] response` in the console.
+
 ## Verification
 
 ### Check Dev Mode

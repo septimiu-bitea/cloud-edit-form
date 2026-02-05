@@ -36,7 +36,10 @@ const messages = {
     noValuesInDocument: 'No values in document',
     importFailed: (m) => `Import failed: ${m}`,
     noSystemProperties: 'No system properties available.',
-    runningStandalone: 'Running standalone (no host). When loaded by formInit, the edit flow will run with context (form, base, uiLocale, mountEl).'
+    runningStandalone: 'Running standalone (no host). When loaded by formInit, the edit flow will run with context (form, base, uiLocale, mountEl).',
+    fieldRequired: 'This field is required',
+    requiredFieldMissing: 'Please fill in the required field.',
+    requiredFieldsMissing: (n) => `Please fill in ${n} required field(s).`
   },
   de: {
     editDocument: 'Eigenschaften bearbeiten',
@@ -71,7 +74,10 @@ const messages = {
     noValuesInDocument: 'Keine Werte im Dokument',
     importFailed: (m) => `Import fehlgeschlagen: ${m}`,
     noSystemProperties: 'Keine Systemeigenschaften verfügbar.',
-    runningStandalone: 'Standalone (kein Host). Bei Laden durch formInit läuft der Bearbeitungsfluss mit Kontext (form, base, uiLocale, mountEl).'
+    runningStandalone: 'Standalone (kein Host). Bei Laden durch formInit läuft der Bearbeitungsfluss mit Kontext (form, base, uiLocale, mountEl).',
+    fieldRequired: 'Dieses Feld ist erforderlich',
+    requiredFieldMissing: 'Bitte füllen Sie das erforderliche Feld aus.',
+    requiredFieldsMissing: (n) => `Bitte füllen Sie ${n} erforderliche Feld(er) aus.`
   },
   ro: {
     editDocument: 'Editează proprietăți',
@@ -106,7 +112,10 @@ const messages = {
     noValuesInDocument: 'Nicio valoare în document',
     importFailed: (m) => `Import nereușit: ${m}`,
     noSystemProperties: 'Nicio proprietate de sistem disponibilă.',
-    runningStandalone: 'Rulare standalone (fără host). La încărcare prin formInit, fluxul de editare rulează cu context (form, base, uiLocale, mountEl).'
+    runningStandalone: 'Rulare standalone (fără host). La încărcare prin formInit, fluxul de editare rulează cu context (form, base, uiLocale, mountEl).',
+    fieldRequired: 'Acest câmp este obligatoriu',
+    requiredFieldMissing: 'Vă rugăm să completați câmpul obligatoriu.',
+    requiredFieldsMissing: (n) => `Vă rugăm să completați ${n} câmp(uri) obligatoriu(ri).`
   }
 }
 
