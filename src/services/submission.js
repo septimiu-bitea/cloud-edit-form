@@ -227,8 +227,14 @@ export function buildValidationPayload ({
         valuesObj[String(slotIndex)] = val
         slotIndex++
       })
-      if (Object.keys(valuesObj).length === 0) valuesObj['1'] = ''
-      multivalueExtendedProperties[numericId] = valuesObj
+      // Only include non-empty values in the payload (exclude deleted slots)
+      const filled = Object.keys(valuesObj)
+        .sort((a, b) => Number(a) - Number(b))
+        .map(k => valuesObj[k])
+        .filter(v => v != null && String(v).trim() !== '')
+      const filteredObj = {}
+      filled.forEach((val, idx) => { filteredObj[String(idx + 1)] = val })
+      multivalueExtendedProperties[numericId] = Object.keys(filteredObj).length > 0 ? filteredObj : { '1': '' }
     } else {
       const prevSingle = prevMap[formDataKey] ?? prevMap[propId]
       const currVal = raw != null ? norm(raw, dt) : (prevSingle != null ? norm(prevSingle, dt) : '')
