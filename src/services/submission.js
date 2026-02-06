@@ -444,7 +444,6 @@ function normalizeUpdatePayloadTypes (validationResponse, storeObject, { metaIdx
     systemProperties[k] = v == null ? '' : String(v)
   }
 
-  const mvep = validationResponse.multivalueExtendedProperties || {}
   const extendedProperties = {}
   const ext = validationResponse.extendedProperties || {}
   for (const [numericId, v] of Object.entries(ext)) {
