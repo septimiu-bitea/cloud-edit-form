@@ -3,8 +3,6 @@
  */
 // REPO_ID comes from scripts/loading.js via window.__formInitContext.repoId (or env vars for local dev)
 
-import { log } from '@/utils/debug'
-
 function createJ (apiKey) {
   const j = async (u, o = {}) => {
     const d = {
@@ -28,16 +26,7 @@ function createJ (apiKey) {
  * Create API instance for a given base, locale, optional apiKey and onPremise (e.g. from __formInitContext).
  */
 export function createApi ({ base, locale = 'en', apiKey, onPremise = false } = {}) {
-  log('[api] createApi', { onPremise, base: base ? `${base.slice(0, 40)}...` : base })
-  const rawJ = createJ(apiKey)
-  const j = async (url, opts = {}) => {
-    const method = (opts.method || 'GET').toUpperCase()
-    log('[api] fetch', method, url)
-    const r = await rawJ(url, opts)
-    const keys = r.json && typeof r.json === 'object' ? Object.keys(r.json).slice(0, 12) : []
-    log('[api] response', r.status, r.ok ? 'ok' : 'fail', keys.length ? keys.join(', ') : '(empty)')
-    return r
-  }
+  const j = createJ(apiKey)
   const lang = locale || 'en'
 
   const catProps = async (baseUrl, repoId, catId) => {
@@ -50,10 +39,9 @@ export function createApi ({ base, locale = 'en', apiKey, onPremise = false } = 
       `${baseUrl}/dmsconfig/r/${encodeURIComponent(repoId)}/objectmanagement/categories/${encodeURIComponent(idStr)}/properties`,
       { headers: { Accept: 'application/json', 'Accept-Language': locale || 'en' } }
     )
-    const rawArr = Array.isArray(r.json?._embedded?.properties) ? r.json._embedded.properties
+    const arr = Array.isArray(r.json?._embedded?.properties) ? r.json._embedded.properties
       : (Array.isArray(r.json) ? r.json : (r.json?.properties || r.json?.items || []))
-    // Return properties as-is - API should provide isMandatory field if available
-    return { raw: r.json, arr: Array.isArray(rawArr) ? rawArr : [] }
+    return { raw: r.json, arr: Array.isArray(arr) ? arr : [] }
   }
 
   const allProps = async (baseUrl, repoId) => {
@@ -84,22 +72,6 @@ export function createApi ({ base, locale = 'en', apiKey, onPremise = false } = 
     return { raw: r.json }
   }
 
-  /** GET single category by id: /dmsconfig/r/{repoId}/objectmanagement/categories/{id} */
-  const category = async (baseUrl, repoId, id) => {
-    const idRaw = id != null && typeof id === 'object'
-      ? (id.id ?? id.categoryId ?? id.uuid ?? id.uniqueId ?? id.key ?? '')
-      : (id ?? '')
-    const idStr = (typeof idRaw === 'string' ? idRaw : String(idRaw)).trim()
-    if (!idStr) return { raw: null, item: null }
-    const r = await j(
-      `${baseUrl}/dmsconfig/r/${encodeURIComponent(repoId)}/objectmanagement/categories/${encodeURIComponent(idStr)}`,
-      { headers: { Accept: 'application/json', 'Accept-Language': locale || 'en' } }
-    )
-    const item = r.json && typeof r.json === 'object' ? r.json : null
-    return { raw: r.json, item }
-  }
-
-  /** Fallback only: GET all categories. Prefer category(baseUrl, repoId, id) when you have an id. */
   const categories = async (baseUrl, repoId) => {
     const r = await j(
       `${baseUrl}/dmsconfig/r/${encodeURIComponent(repoId)}/objectmanagement/categories`,
@@ -123,13 +95,6 @@ export function createApi ({ base, locale = 'en', apiKey, onPremise = false } = 
     const url = `${baseUrl}/dms/r/${encodeURIComponent(repoId)}/o2/${encodeURIComponent(documentId)}`
     const r = await j(url, { headers: { Accept: 'application/hal+json, application/json;q=0.9' } })
     return r.json
-  }
-
-  /** GET lock token for document. 404 with "Lock token does not exists." means document is not locked. */
-  const getLockToken = async (baseUrl, repoId, documentId) => {
-    const url = `${baseUrl}/dms/r/${encodeURIComponent(repoId)}/o2/${encodeURIComponent(documentId)}/locktoken`
-    const r = await j(url, { headers: { Accept: 'application/json, text/plain, */*' } })
-    return { ok: r.ok, status: r.status, json: r.json, text: r.text }
   }
 
   const validateUpdate = async (baseUrl, repoId, documentId, payload) => {
@@ -213,7 +178,6 @@ export function createApi ({ base, locale = 'en', apiKey, onPremise = false } = 
       }).filter(Boolean)
     } catch { return [] }
   }
-  /** Fallback only: full list. Prefer categoryFromStoredoctype when you have an id. */
   const categoriesFromStoredoctype = async (baseUrl, repoId) => {
     const data = await getStoredoctypeCache(baseUrl, repoId)
     const arr = (data?.storageDocumentTypes || []).map(dt => ({
@@ -221,21 +185,6 @@ export function createApi ({ base, locale = 'en', apiKey, onPremise = false } = 
       kind: dt.kind, group: dt.group, isRecentlyUsed: dt.isRecentlyUsed, canEditExtendedProperties: dt.canEditExtendedProperties
     }))
     return { raw: data, arr }
-  }
-  /** Single category from storedoctype cache by id (on-premise). */
-  const categoryFromStoredoctype = async (baseUrl, repoId, catId) => {
-    if (!catId) return { raw: null, item: null }
-    const data = await getStoredoctypeCache(baseUrl, repoId)
-    const catIdStr = String(catId).trim()
-    const docType = (data?.storageDocumentTypes || []).find(dt =>
-      dt.id === catIdStr || dt.id?.toLowerCase() === catIdStr.toLowerCase() || dt.displayName?.toLowerCase() === catIdStr.toLowerCase()
-    )
-    if (!docType) return { raw: null, item: null }
-    const item = {
-      id: docType.id, name: docType.displayName, displayName: docType.displayName, type: 'DOCUMENT_TYPE',
-      kind: docType.kind, group: docType.group, isRecentlyUsed: docType.isRecentlyUsed, canEditExtendedProperties: docType.canEditExtendedProperties
-    }
-    return { raw: docType, item }
   }
   const catPropsFromStoredoctype = async (baseUrl, repoId, catId) => {
     if (!catId) return { raw: {}, arr: [] }
@@ -332,9 +281,8 @@ export function createApi ({ base, locale = 'en', apiKey, onPremise = false } = 
 
   if (onPremise) {
     return {
-      j, setTxt: () => {}, objdefs, srm, o2, getLockToken, validateUpdate, storedoctype,
-      category: categoryFromStoredoctype, // primary
-      categories: categoriesFromStoredoctype, // fallback only
+      j, setTxt: () => {}, objdefs, srm, o2, validateUpdate, storedoctype,
+      categories: categoriesFromStoredoctype,
       catProps: catPropsFromStoredoctype,
       allProps: allPropsFromStoredoctype,
       datasets: datasetsFromStoredoctype
@@ -344,15 +292,13 @@ export function createApi ({ base, locale = 'en', apiKey, onPremise = false } = 
   const Dv = {
     j,
     setTxt: () => {}, // no-op (no Form.io)
-    category, // primary: single category by id
     catProps,
     allProps,
     datasets,
     objdefs,
-    categories, // fallback only: full list
+    categories,
     srm,
     o2,
-    getLockToken,
     validateUpdate,
     storedoctype
   }

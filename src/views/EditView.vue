@@ -78,9 +78,9 @@ import {
   getMultivalueSlotMaps,
   collectSourceProperties,
   buildValidationPayload,
-  buildUpdatePayloadFromValidationResponse,
+  buildO2mPayloadFromValidationResponse,
   extractValuesFromValidationResponse,
-  putO2Update
+  putO2mUpdate
 } from '@/services/submission'
 import { resolveDocIdFromProcess } from '@/utils/docId'
 import { mapIdtoUniqueId, idToUniqueIdFromSrm, getNumericIdFromUuid } from '@/utils/idMapping'
@@ -620,24 +620,25 @@ export default {
           }
         }
 
-        const updatePayload = buildUpdatePayloadFromValidationResponse(validationResponse, {
-          storeObject: validationPayload.storeObject,
-          metaIdx: this.metaIdx,
-          idMap: this.idMap
+        const storeObj = validationResponse?.storeObject ?? validationPayload?.storeObject ?? {}
+        const o2mPayload = buildO2mPayloadFromValidationResponse(validationResponse, {
+          filename: storeObj.filename ?? validationPayload.storeObject?.filename ?? '',
+          sourceCategory: objectDefinitionId ?? this.categoryId.simpleId ?? this.categoryId.uniqueId ?? ''
         })
-        if (!updatePayload) {
+        if (!o2mPayload) {
           this.snackbar = { show: true, text: this.t(this.locale, 'saveFailedWithStatus', 500) || 'Save failed', color: 'error' }
           return
         }
-        const result = await putO2Update({
+        const result = await putO2mUpdate({
           base: this.base,
           repoId: this.repoId,
-          documentId: this.docId,
-          payload: updatePayload,
+          dmsObjectId: this.docId,
+          payload: o2mPayload,
           apiKey
         })
 
         if (result.ok) {
+          // Refetch document (GET O2) so form shows persisted state
           await this.refetchDocument()
           this.invalidFields = []
           this.snackbar = { show: true, text: this.t(this.locale, 'savedSuccessfully'), color: 'success' }

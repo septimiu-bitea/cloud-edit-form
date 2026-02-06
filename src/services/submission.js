@@ -541,7 +541,7 @@ export function buildUpdatePayloadFromValidationResponse (validationResponse, { 
 }
 
 /**
- * Build O2m update payload body.
+ * Build O2m update payload body (optional keys only when provided).
  */
 export function buildO2mPayload ({
   sourceProperties,
@@ -563,6 +563,54 @@ export function buildO2mPayload ({
     ...(contentLocationUri ? { contentLocationUri } : {}),
     ...(contentUri ? { contentUri } : {})
   }
+}
+
+/**
+ * Build payload for PUT /dms/r/{repoId}/o2m/{dmsObjectId} from validation response.
+ * Official API: filename, alterationText, sourceCategory, sourceId, contentLocationUri, sourceProperties.
+ * @see https://help.d-velop.de/dev/documentation/dms-app#tag/dmsobjects/put/r/{repositoryId}/o2m/{dmsObjectId}
+ */
+export function buildO2mPayloadFromValidationResponse (validationResponse, {
+  filename,
+  alterationText,
+  sourceCategory,
+  sourceId,
+  contentLocationUri
+} = {}) {
+  if (!validationResponse || typeof validationResponse !== 'object') return null
+  const ext = validationResponse.extendedProperties || {}
+  const mvep = validationResponse.multivalueExtendedProperties || {}
+  const properties = []
+  const seen = new Set()
+  for (const [numericId, v] of Object.entries(ext)) {
+    if (seen.has(numericId)) continue
+    seen.add(numericId)
+    const val = v != null && v !== '' ? String(v) : ''
+    properties.push({ key: numericId, values: [val] })
+  }
+  for (const [numericId, slotMap] of Object.entries(mvep)) {
+    if (!slotMap || typeof slotMap !== 'object' || Array.isArray(slotMap)) continue
+    const slots = Object.keys(slotMap)
+      .filter(k => /^\d+$/.test(String(k)))
+      .sort((a, b) => Number(a) - Number(b))
+    const values = slots.map(s => (slotMap[s] != null ? String(slotMap[s]) : ''))
+    if (seen.has(numericId)) {
+      const idx = properties.findIndex(p => p.key === numericId)
+      if (idx !== -1) properties[idx].values = values
+    } else {
+      seen.add(numericId)
+      properties.push({ key: numericId, values })
+    }
+  }
+  const payload = {
+    ...(filename != null && filename !== '' ? { filename } : {}),
+    ...(alterationText != null && alterationText !== '' ? { alterationText } : {}),
+    ...(sourceCategory != null && sourceCategory !== '' ? { sourceCategory } : {}),
+    ...(sourceId != null && sourceId !== '' ? { sourceId } : {}),
+    ...(contentLocationUri != null && contentLocationUri !== '' ? { contentLocationUri } : {})
+  }
+  if (properties.length > 0) payload.sourceProperties = { properties }
+  return payload
 }
 
 /**
