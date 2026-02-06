@@ -423,28 +423,86 @@ export function buildSourcePropertiesFromValidationResponse (validationResponse,
 }
 
 /**
- * Build update payload (5) from validate response (4).
- * Used for PUT /dms/r/{repoId}/o2/{documentId} with full document body.
- * Merges validation response with type, storeObject (from validate request), and state.
+ * Ensure payload values match expected types for PUT /o2/{documentId}.
+ * Should payload: type number, systemProperties/extendedProperties/multivalue values strings, storeObject.id number 0.
  */
-export function buildUpdatePayloadFromValidationResponse (validationResponse, { storeObject } = {}) {
-  if (!validationResponse || typeof validationResponse !== 'object') return null
-  const systemProperties = { ...(validationResponse.systemProperties || {}) }
+function normalizeUpdatePayloadTypes (validationResponse, storeObject, { metaIdx, idMap } = {}) {
+  const systemProperties = {}
+  for (const [k, v] of Object.entries(validationResponse.systemProperties || {})) {
+    systemProperties[k] = v == null ? '' : String(v)
+  }
   if (validationResponse.colorCode != null && systemProperties.property_colorcode === undefined) {
     systemProperties.property_colorcode = String(validationResponse.colorCode)
   }
+
+  const extendedProperties = {}
+  const ext = validationResponse.extendedProperties || {}
+  for (const [numericId, v] of Object.entries(ext)) {
+    let str = ''
+    if (v != null && v !== '') {
+      if (metaIdx && idMap) {
+        const uuid = idMap[numericId]
+        const meta = uuid ? metaIdx.get(uuid) : metaIdx.get(numericId)
+        const dt = meta?.dataType || 'STRING'
+        str = String(coerceValueForType(v, dt) ?? '')
+      } else {
+        str = String(v)
+      }
+    }
+    extendedProperties[numericId] = str
+  }
+
+  const multivalueExtendedProperties = {}
+  const mvep = validationResponse.multivalueExtendedProperties || {}
+  for (const [numericId, slotMap] of Object.entries(mvep)) {
+    if (!slotMap || typeof slotMap !== 'object' || Array.isArray(slotMap)) {
+      multivalueExtendedProperties[numericId] = {}
+      continue
+    }
+    const out = {}
+    for (const [slot, val] of Object.entries(slotMap)) {
+      out[slot] = val == null ? '' : String(val)
+    }
+    multivalueExtendedProperties[numericId] = out
+  }
+
+  const remarks = {}
+  for (const [k, v] of Object.entries(validationResponse.remarks ?? {})) {
+    remarks[k] = v == null ? '' : String(v)
+  }
+
+  const so = storeObject && typeof storeObject === 'object' ? { ...storeObject } : {}
+  if (!('id' in so) || typeof so.id !== 'number') so.id = 0
+  if (!('doMapping' in so)) so.doMapping = false
+  if (!('isInUpdateMode' in so)) so.isInUpdateMode = true
+  if (!('doValidate' in so)) so.doValidate = false
+  if (!('fileSelect' in so)) so.fileSelect = false
+  if (!so._links) so._links = {}
+  if (!so._embedded) so._embedded = {}
+
   return {
     type: 1,
     objectDefinitionId: validationResponse.objectDefinitionId,
     systemProperties,
-    remarks: validationResponse.remarks ?? {},
-    multivalueExtendedProperties: validationResponse.multivalueExtendedProperties ?? {},
-    extendedProperties: validationResponse.extendedProperties ?? {},
-    docNumber: validationResponse.docNumber,
+    remarks,
+    multivalueExtendedProperties,
+    extendedProperties,
+    docNumber: validationResponse.docNumber != null ? String(validationResponse.docNumber) : '',
     id: validationResponse.id,
-    storeObject: storeObject && typeof storeObject === 'object' ? storeObject : {},
+    storeObject: so,
     state: null
   }
+}
+
+/**
+ * Build update payload (5) from validate response (4).
+ * Used for PUT /dms/r/{repoId}/o2/{documentId} with full document body.
+ * Merges validation response with type, storeObject (from validate request), and state.
+ * Optional metaIdx + idMap coerce extendedProperties by dataType before stringifying.
+ */
+export function buildUpdatePayloadFromValidationResponse (validationResponse, { storeObject, metaIdx, idMap } = {}) {
+  if (!validationResponse || typeof validationResponse !== 'object') return null
+  return normalizeUpdatePayloadTypes(validationResponse, storeObject, { metaIdx, idMap })
 }
 
 /**

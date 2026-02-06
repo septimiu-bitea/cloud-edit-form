@@ -620,7 +620,9 @@ export default {
         }
 
         const updatePayload = buildUpdatePayloadFromValidationResponse(validationResponse, {
-          storeObject: validationPayload.storeObject
+          storeObject: validationPayload.storeObject,
+          metaIdx: this.metaIdx,
+          idMap: this.idMap
         })
         if (!updatePayload) {
           this.snackbar = { show: true, text: this.t(this.locale, 'saveFailedWithStatus', 500) || 'Save failed', color: 'error' }
