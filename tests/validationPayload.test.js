@@ -342,7 +342,7 @@ test('buildO2mPayloadFromValidationResponse: optional fields only when provided'
   })
   assert(withCategory.filename === 'doc.pdf', 'filename when provided')
   assert(withCategory.sourceCategory === 'cat-ID', 'sourceCategory when provided')
-  assert(withCategory.sourceId == null, 'sourceId not set when sourceCategory provided (per API: sourceCategory ignored on update)')
+  assert(withCategory.sourceId === '/dms/r/r1/source', 'sourceId always set when sourceProperties present (per API: sourceCategory ignored on update, mapping uses sourceId)')
   const withDefaultSource = buildO2mPayloadFromValidationResponse(validationResponse, { repoId: 'r1' })
   assert(withDefaultSource.sourceId === '/dms/r/r1/source', 'default sourceId when only repoId and sourceProperties per update_definition.txt')
 })

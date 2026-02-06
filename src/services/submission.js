@@ -613,8 +613,9 @@ export function buildO2mPayloadFromValidationResponse (validationResponse, {
   }
   if (properties.length > 0) {
     payload.sourceProperties = { properties }
-    // API: "The sourceId of the default source system is always /dms/r/{repositoryId}/source"
-    if (!payload.sourceCategory && !payload.sourceId && repoId) {
+    // API: "sourceCategory is ignored when you update a DMS object" – mapping uses sourceId only. Always send sourceId when sending sourceProperties.
+    // Default: "The sourceId of the default source system is always /dms/r/{repositoryId}/source"
+    if (!payload.sourceId && repoId) {
       payload.sourceId = `/dms/r/${encodeURIComponent(repoId)}/source`
     }
   }
