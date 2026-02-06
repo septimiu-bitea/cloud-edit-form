@@ -279,6 +279,74 @@ test('buildValidationPayload: storeObject has correct shape', () => {
   assert(payload.storeObject._embedded && typeof payload.storeObject._embedded === 'object', 'storeObject._embedded')
 })
 
+// --- buildO2mPayloadFromValidationResponse (PUT o2m body per update_definition.txt) ---
+test('buildO2mPayloadFromValidationResponse: sourceProperties shape per API (key + values array)', () => {
+  const validationResponse = {
+    extendedProperties: { '2': 'INV/2022/0011', '25': '2022-06-02' },
+    multivalueExtendedProperties: {}
+  }
+  const payload = buildO2mPayloadFromValidationResponse(validationResponse, { repoId: 'repo-uuid-123' })
+  assert(payload != null, 'payload exists')
+  assert(payload.sourceProperties != null, 'sourceProperties exists')
+  assert(Array.isArray(payload.sourceProperties.properties), 'sourceProperties.properties is array (per API)')
+  const props = payload.sourceProperties.properties
+  assert(props.every(p => typeof p.key === 'string' && Array.isArray(p.values)), 'each property has key (string) and values (array)')
+  assert(props.every(p => p.values.every(v => typeof v === 'string')), 'values are strings (per API)')
+  const inv = props.find(p => p.key === '2')
+  assert(inv && inv.values.length === 1 && inv.values[0] === 'INV/2022/0011', 'single-value as one-element array')
+})
+
+test('buildO2mPayloadFromValidationResponse: default sourceId per API when repoId given', () => {
+  const validationResponse = {
+    extendedProperties: { '2': 'val' },
+    multivalueExtendedProperties: {}
+  }
+  const repoId = 'f7258e62-5526-49e5-abc5-d0ced1b4ada5'
+  const payload = buildO2mPayloadFromValidationResponse(validationResponse, { repoId })
+  assert(payload.sourceProperties != null, 'has sourceProperties')
+  assert(payload.sourceId === `/dms/r/${repoId}/source`, 'sourceId is default /dms/r/{repositoryId}/source per update_definition.txt')
+})
+
+test('buildO2mPayloadFromValidationResponse: custom sourceId not overridden', () => {
+  const validationResponse = {
+    extendedProperties: { '2': 'x' },
+    multivalueExtendedProperties: {}
+  }
+  const payload = buildO2mPayloadFromValidationResponse(validationResponse, {
+    repoId: 'repo-1',
+    sourceId: '/myapp/sources/mysource'
+  })
+  assert(payload.sourceId === '/myapp/sources/mysource', 'custom sourceId preserved')
+})
+
+test('buildO2mPayloadFromValidationResponse: multivalue as values array per API', () => {
+  const validationResponse = {
+    extendedProperties: {},
+    multivalueExtendedProperties: {
+      '106': { '1': 'Kabel', '2': 'Kabel' }
+    }
+  }
+  const payload = buildO2mPayloadFromValidationResponse(validationResponse, { repoId: 'r1' })
+  const p106 = payload.sourceProperties.properties.find(p => p.key === '106')
+  assert(p106 != null, 'multivalue property present')
+  assert(Array.isArray(p106.values) && p106.values.length === 2, 'values is array (per API)')
+  assert(p106.values[0] === 'Kabel' && p106.values[1] === 'Kabel', 'slot values in order')
+})
+
+test('buildO2mPayloadFromValidationResponse: optional fields only when provided', () => {
+  const validationResponse = { extendedProperties: { '1': 'a' }, multivalueExtendedProperties: {} }
+  const withCategory = buildO2mPayloadFromValidationResponse(validationResponse, {
+    repoId: 'r1',
+    filename: 'doc.pdf',
+    sourceCategory: 'cat-ID'
+  })
+  assert(withCategory.filename === 'doc.pdf', 'filename when provided')
+  assert(withCategory.sourceCategory === 'cat-ID', 'sourceCategory when provided')
+  assert(withCategory.sourceId == null, 'sourceId not set when sourceCategory provided (per API: sourceCategory ignored on update)')
+  const withDefaultSource = buildO2mPayloadFromValidationResponse(validationResponse, { repoId: 'r1' })
+  assert(withDefaultSource.sourceId === '/dms/r/r1/source', 'default sourceId when only repoId and sourceProperties per update_definition.txt')
+})
+
 test('buildValidationPayload: adds eTag and lockTokenUrl from o2Response when present', () => {
   const o2Response = {
     storeObject: {
@@ -481,9 +549,22 @@ async function runIntegrationTest (onPremise) {
   const storeObj = validationResponse?.storeObject ?? payload?.storeObject ?? {}
   const o2mPayload = buildO2mPayloadFromValidationResponse(validationResponse, {
     filename: storeObj.filename ?? payload?.storeObject?.filename ?? '',
-    sourceCategory: objectDefinitionId ?? categoryId ?? ''
+    sourceCategory: objectDefinitionId ?? categoryId ?? '',
+    repoId: TEST_CONFIG.repoId
   })
   assert(o2mPayload != null, 'buildO2mPayloadFromValidationResponse should return payload')
+  // Per update_definition.txt: when sourceProperties present, source required (default sourceId = /dms/r/{repositoryId}/source)
+  if (o2mPayload.sourceProperties?.properties?.length > 0) {
+    assert(o2mPayload.sourceId != null || o2mPayload.sourceCategory != null, 'o2m payload must have sourceId or sourceCategory when sourceProperties set')
+    if (o2mPayload.sourceId != null) {
+      assert(o2mPayload.sourceId === `/dms/r/${encodeURIComponent(TEST_CONFIG.repoId)}/source` || o2mPayload.sourceId.startsWith('/'), 'sourceId must be default or custom URI')
+    }
+    assert(Array.isArray(o2mPayload.sourceProperties.properties), 'sourceProperties.properties must be array per API')
+    o2mPayload.sourceProperties.properties.forEach(p => {
+      assert(typeof p.key === 'string', 'property key must be string')
+      assert(Array.isArray(p.values) && p.values.every(v => typeof v === 'string'), 'property values must be string[] per API')
+    })
+  }
   console.log('  📤 PUT o2m (save with current values)...')
   const saveResult = await putO2mUpdate({
     base,

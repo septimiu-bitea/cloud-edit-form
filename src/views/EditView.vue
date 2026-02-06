@@ -621,9 +621,18 @@ export default {
         }
 
         const storeObj = validationResponse?.storeObject ?? validationPayload?.storeObject ?? {}
+        const sourceCategory = String(
+          validationResponse?.objectDefinitionId ??
+          objectDefinitionId ??
+          this.categoryId.simpleId ??
+          this.categoryId.uniqueId ??
+          ''
+        )
         const o2mPayload = buildO2mPayloadFromValidationResponse(validationResponse, {
           filename: storeObj.filename ?? validationPayload.storeObject?.filename ?? '',
-          sourceCategory: objectDefinitionId ?? this.categoryId.simpleId ?? this.categoryId.uniqueId ?? ''
+          sourceCategory: sourceCategory || undefined,
+          sourceId: this.formInitContext?.sourceId ?? this.formInitContext?.data?.sourceId ?? undefined,
+          repoId: this.repoId
         })
         if (!o2mPayload) {
           this.snackbar = { show: true, text: this.t(this.locale, 'saveFailedWithStatus', 500) || 'Save failed', color: 'error' }

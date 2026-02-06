@@ -568,6 +568,7 @@ export function buildO2mPayload ({
 /**
  * Build payload for PUT /dms/r/{repoId}/o2m/{dmsObjectId} from validation response.
  * Official API: filename, alterationText, sourceCategory, sourceId, contentLocationUri, sourceProperties.
+ * Default source (when using sourceProperties): sourceId = "/dms/r/{repositoryId}/source" per API docs.
  * @see https://help.d-velop.de/dev/documentation/dms-app#tag/dmsobjects/put/r/{repositoryId}/o2m/{dmsObjectId}
  */
 export function buildO2mPayloadFromValidationResponse (validationResponse, {
@@ -575,7 +576,8 @@ export function buildO2mPayloadFromValidationResponse (validationResponse, {
   alterationText,
   sourceCategory,
   sourceId,
-  contentLocationUri
+  contentLocationUri,
+  repoId
 } = {}) {
   if (!validationResponse || typeof validationResponse !== 'object') return null
   const ext = validationResponse.extendedProperties || {}
@@ -605,11 +607,17 @@ export function buildO2mPayloadFromValidationResponse (validationResponse, {
   const payload = {
     ...(filename != null && filename !== '' ? { filename } : {}),
     ...(alterationText != null && alterationText !== '' ? { alterationText } : {}),
-    ...(sourceCategory != null && sourceCategory !== '' ? { sourceCategory } : {}),
+    ...(sourceCategory != null && sourceCategory !== '' ? { sourceCategory: String(sourceCategory) } : {}),
     ...(sourceId != null && sourceId !== '' ? { sourceId } : {}),
     ...(contentLocationUri != null && contentLocationUri !== '' ? { contentLocationUri } : {})
   }
-  if (properties.length > 0) payload.sourceProperties = { properties }
+  if (properties.length > 0) {
+    payload.sourceProperties = { properties }
+    // API: "The sourceId of the default source system is always /dms/r/{repositoryId}/source"
+    if (!payload.sourceCategory && !payload.sourceId && repoId) {
+      payload.sourceId = `/dms/r/${encodeURIComponent(repoId)}/source`
+    }
+  }
   return payload
 }
 
