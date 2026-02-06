@@ -81,6 +81,21 @@ export function createApi ({ base, locale = 'en', apiKey, onPremise = false } = 
     return { raw: r.json, arr }
   }
 
+  /** GET single category by id: /dmsconfig/r/{repoId}/objectmanagement/categories/{id} */
+  const category = async (baseUrl, repoId, id) => {
+    const idRaw = id != null && typeof id === 'object'
+      ? (id.id ?? id.categoryId ?? id.uuid ?? id.uniqueId ?? id.key ?? '')
+      : (id ?? '')
+    const idStr = (typeof idRaw === 'string' ? idRaw : String(idRaw)).trim()
+    if (!idStr) return { raw: null, item: null }
+    const r = await j(
+      `${baseUrl}/dmsconfig/r/${encodeURIComponent(repoId)}/objectmanagement/categories/${encodeURIComponent(idStr)}`,
+      { headers: { Accept: 'application/json', 'Accept-Language': locale || 'en' } }
+    )
+    const item = r.json && typeof r.json === 'object' ? r.json : null
+    return { raw: r.json, item }
+  }
+
   const srm = async (baseUrl, repoId, documentId) => {
     const props = JSON.stringify({ property_document_id: [documentId] })
     const url = `${baseUrl}/dms/r/${encodeURIComponent(repoId)}/sr/?` +
@@ -99,6 +114,24 @@ export function createApi ({ base, locale = 'en', apiKey, onPremise = false } = 
 
   const validateUpdate = async (baseUrl, repoId, documentId, payload) => {
     const url = `${baseUrl}/dms/r/${encodeURIComponent(repoId)}/o2/${encodeURIComponent(documentId)}/update/validate`
+    const r = await j(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain', Accept: 'application/json, text/plain, */*' },
+      body: JSON.stringify(payload)
+    })
+    return { ok: r.ok, status: r.status, json: r.json, text: r.text }
+  }
+
+  /** GET lock token for document. 404 with "Lock token does not exists." means document is not locked. */
+  const getLockToken = async (baseUrl, repoId, documentId) => {
+    const url = `${baseUrl}/dms/r/${encodeURIComponent(repoId)}/o2/${encodeURIComponent(documentId)}/locktoken`
+    const r = await j(url, { headers: { Accept: 'application/json, text/plain, */*' } })
+    return { ok: r.ok, status: r.status, json: r.json, text: r.text }
+  }
+
+  /** POST validvalues/p/property_state with document payload; returns valid/current state value(s). */
+  const getValidValuesPropertyState = async (baseUrl, repoId, payload) => {
+    const url = `${baseUrl}/dms/r/${encodeURIComponent(repoId)}/validvalues/p/property_state`
     const r = await j(url, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain', Accept: 'application/json, text/plain, */*' },
@@ -185,6 +218,19 @@ export function createApi ({ base, locale = 'en', apiKey, onPremise = false } = 
       kind: dt.kind, group: dt.group, isRecentlyUsed: dt.isRecentlyUsed, canEditExtendedProperties: dt.canEditExtendedProperties
     }))
     return { raw: data, arr }
+  }
+  /** Single category by id (on-premise): same shape as cloud category() → { raw, item }. */
+  const categoryFromStoredoctype = async (baseUrl, repoId, id) => {
+    const idRaw = id != null && typeof id === 'object'
+      ? (id.id ?? id.categoryId ?? id.uuid ?? id.uniqueId ?? id.key ?? '')
+      : (id ?? '')
+    const idStr = (typeof idRaw === 'string' ? idRaw : String(idRaw)).trim()
+    if (!idStr) return { raw: null, item: null }
+    const data = await getStoredoctypeCache(baseUrl, repoId)
+    const docType = (data?.storageDocumentTypes || []).find(dt =>
+      dt.id === idStr || dt.id?.toLowerCase() === idStr.toLowerCase() || (dt.displayName && String(dt.displayName).toLowerCase() === idStr.toLowerCase())
+    )
+    return { raw: docType ?? null, item: docType ?? null }
   }
   const catPropsFromStoredoctype = async (baseUrl, repoId, catId) => {
     if (!catId) return { raw: {}, arr: [] }
@@ -282,6 +328,7 @@ export function createApi ({ base, locale = 'en', apiKey, onPremise = false } = 
   if (onPremise) {
     return {
       j, setTxt: () => {}, objdefs, srm, o2, validateUpdate, storedoctype,
+      category: categoryFromStoredoctype,
       categories: categoriesFromStoredoctype,
       catProps: catPropsFromStoredoctype,
       allProps: allPropsFromStoredoctype,
@@ -292,6 +339,7 @@ export function createApi ({ base, locale = 'en', apiKey, onPremise = false } = 
   const Dv = {
     j,
     setTxt: () => {}, // no-op (no Form.io)
+    category,
     catProps,
     allProps,
     datasets,
@@ -299,7 +347,9 @@ export function createApi ({ base, locale = 'en', apiKey, onPremise = false } = 
     categories,
     srm,
     o2,
+    getLockToken,
     validateUpdate,
+    getValidValuesPropertyState,
     storedoctype
   }
 
