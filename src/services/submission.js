@@ -314,17 +314,17 @@ export function buildValidationPayload ({
   if (eTag) storeObject.eTag = eTag
   if (lockTokenUrl) storeObject.lockTokenUrl = lockTokenUrl
 
-  return {
-    type: 1,
-    objectDefinitionId: String(numericCatId),
-    systemProperties,
-    remarks: {},
-    multivalueExtendedProperties,
-    extendedProperties,
-    docNumber: documentId,
-    id: documentId,
-    storeObject
-  }
+  const payload = {}
+  payload.type = 1
+  payload.objectDefinitionId = String(numericCatId)
+  payload.systemProperties = systemProperties
+  payload.remarks = {}
+  payload.multivalueExtendedProperties = multivalueExtendedProperties
+  payload.extendedProperties = extendedProperties
+  payload.docNumber = documentId
+  payload.id = documentId
+  payload.storeObject = storeObject
+  return payload
 }
 
 /**
@@ -502,18 +502,18 @@ function normalizeUpdatePayloadTypes (validationResponse, storeObject, { metaIdx
   if (!so._links) so._links = {}
   if (!so._embedded) so._embedded = {}
 
-  return {
-    type: 1,
-    objectDefinitionId: validationResponse.objectDefinitionId,
-    systemProperties,
-    remarks,
-    multivalueExtendedProperties,
-    extendedProperties,
-    docNumber: validationResponse.docNumber != null ? String(validationResponse.docNumber) : '',
-    id: validationResponse.id,
-    storeObject: so,
-    state: null
-  }
+  const payload = {}
+  payload.type = 1
+  payload.objectDefinitionId = validationResponse.objectDefinitionId
+  payload.systemProperties = systemProperties
+  payload.remarks = remarks
+  payload.multivalueExtendedProperties = multivalueExtendedProperties
+  payload.extendedProperties = extendedProperties
+  payload.docNumber = validationResponse.docNumber != null ? String(validationResponse.docNumber) : ''
+  payload.id = validationResponse.id
+  payload.storeObject = so
+  payload.state = null
+  return payload
 }
 
 /**
