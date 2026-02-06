@@ -286,10 +286,12 @@ export function buildValidationPayload ({
   let eTag = null
   let lockTokenUrl = null
   if (o2Response) {
-    if (o2Response.storeObject) {
-      eTag = o2Response.storeObject.eTag
-      lockTokenUrl = o2Response.storeObject.lockTokenUrl
+    const storeObj = o2Response.storeObject ?? o2Response._embedded?.storeObject
+    if (storeObj) {
+      eTag = storeObj.eTag ?? storeObj.etag ?? null
+      lockTokenUrl = storeObj.lockTokenUrl ?? storeObj.lockToken ?? null
     }
+    if (!eTag && (o2Response.eTag ?? o2Response.etag)) eTag = o2Response.eTag ?? o2Response.etag
     if (!lockTokenUrl && o2Response._links?.locktoken?.href) {
       lockTokenUrl = o2Response._links.locktoken.href
     }
@@ -494,6 +496,17 @@ function normalizeUpdatePayloadTypes (validationResponse, storeObject, { metaIdx
   }
 
   const so = storeObject && typeof storeObject === 'object' ? { ...storeObject } : {}
+  // Server requires eTag on update; prefer validation response storeObject (eTag/lockTokenUrl) when present
+  const respStore = validationResponse?.storeObject ?? validationResponse?._embedded?.storeObject
+  if (respStore) {
+    if (respStore.eTag != null) so.eTag = respStore.eTag
+    if (respStore.etag != null) so.eTag = so.eTag ?? respStore.etag
+    if (respStore.lockTokenUrl != null) so.lockTokenUrl = respStore.lockTokenUrl
+    if (respStore.lockToken != null) so.lockTokenUrl = so.lockTokenUrl ?? respStore.lockToken
+  }
+  if ((so.eTag == null || so.eTag === '') && (validationResponse?.eTag ?? validationResponse?.etag) != null) {
+    so.eTag = validationResponse.eTag ?? validationResponse.etag
+  }
   if (!('id' in so) || typeof so.id !== 'number') so.id = 0
   if (!('doMapping' in so)) so.doMapping = false
   if (!('isInUpdateMode' in so)) so.isInUpdateMode = true
