@@ -327,7 +327,7 @@ export function createApi ({ base, locale = 'en', apiKey, onPremise = false } = 
 
   if (onPremise) {
     return {
-      j, setTxt: () => {}, objdefs, srm, o2, validateUpdate, storedoctype,
+      j, setTxt: () => {}, objdefs, srm, o2, getLockToken, validateUpdate, getValidValuesPropertyState, storedoctype,
       category: categoryFromStoredoctype,
       categories: categoriesFromStoredoctype,
       catProps: catPropsFromStoredoctype,

@@ -13,7 +13,7 @@ import { createApi } from '../src/services/api.js'
 async function loadTestConfig() {
   // Try to load from local test.config.js
   try {
-    const localConfig = await import('../test.config.js')
+    const localConfig = await import('./test.config.js')
     const config = localConfig.TEST_CONFIG || localConfig.default || localConfig
     console.log('[dmsProperties.test] Loaded config from test.config.js')
     return config

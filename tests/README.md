@@ -8,7 +8,7 @@ Tests for `buildValidationPayload` (payload for `POST /o2/{documentId}/update/va
 
 1. `npm run dev`
 2. Open **http://localhost:5173/tests/validation-payload.html** — tests run automatically.
-3. To run the **integration test** with real API data: either copy `test.config.example.js` to `test.config.js` and set `baseUrl`, `repoId`, `documentId`, and `skipApiCalls: false`, or fill the form on the validation-payload page and uncheck "Skip API calls". The integration test will fetch SRM, O2, category properties, build the payload from real form data, and call the validate endpoint.
+3. To run the **integration test** with real API data: either copy `test.config.example.js` to `tests/test.config.js` and set `baseUrl`, `repoId`, `documentId`, and `skipApiCalls: false`, or fill the form on the validation-payload page and uncheck "Skip API calls". The integration test will fetch SRM, O2, category properties, build the payload from real form data, and call the validate endpoint.
 4. On that same page you can re-run with `window.runValidationPayloadTests()` in the console.
 
 Covers:
@@ -28,10 +28,10 @@ Tests for verifying that `dmsProperties` values are correctly populated in form 
 
 1. **Copy test config** (optional - can use environment variables instead):
    ```bash
-   cp test.config.example.js test.config.js
+   cp test.config.example.js tests/test.config.js
    ```
 
-2. **Edit `test.config.js`** with your test instance details:
+2. **Edit `tests/test.config.js`** with your test instance details:
    - `baseUrl`: Your d.velop instance URL
    - `apiKey`: API key (optional - cookies will be used in browser)
    - `repoId`: Repository UUID

@@ -181,7 +181,7 @@
     async function loadConfigFromFile() {
       try {
         // Try to import test.config.js - it might not be accessible in browser due to CORS/build config
-        const configModule = await import('../test.config.js?t=' + Date.now())
+        const configModule = await import('./test.config.js?t=' + Date.now())
         const config = configModule.TEST_CONFIG || configModule.default || configModule
         console.log('✅ Successfully loaded test.config.js')
         return config

@@ -79,7 +79,7 @@
 
     async function loadConfigFile() {
       try {
-        const m = await import('../test.config.js?t=' + Date.now())
+        const m = await import('./test.config.js?t=' + Date.now())
         const config = m.TEST_CONFIG || m.default || m
         if (config && (config.baseUrl || config.repoId)) {
           setFormFromConfig(config)

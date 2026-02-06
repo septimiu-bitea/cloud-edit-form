@@ -6,7 +6,7 @@
 // Run in browser: npm run dev, then open http://localhost:5173/tests/validation-payload.html
 // Use test.config.js or the form on that page to run integration tests with real API data.
 
-import { buildValidationPayload, toMetaIndex, makePrevMap } from '@/services/submission'
+import { buildValidationPayload, buildO2mPayloadFromValidationResponse, putO2mUpdate, toMetaIndex, makePrevMap } from '@/services/submission'
 import { createApi } from '@/services/api'
 import { idToUniqueIdFromSrm, mapIdtoUniqueId, getNumericIdFromUuid } from '@/utils/idMapping'
 import { buildInitialValuesFromO2 } from '@/utils/valueExtraction'
@@ -19,7 +19,7 @@ async function loadTestConfig() {
     return window.TEST_CONFIG
   }
   try {
-    const localConfig = await import('../test.config.js')
+    const localConfig = await import('./test.config.js')
     const config = localConfig.TEST_CONFIG || localConfig.default || localConfig
     console.log('[validationPayload.test] Loaded config from test.config.js')
     return config
@@ -466,16 +466,42 @@ async function runIntegrationTest (onPremise) {
   assert(hasExtended || hasMultivalue || categoryProperties.length === 0, 'payload should include extended or multivalue properties when category has editable props')
 
   const validationResult = await Dv.validateUpdate(base, TEST_CONFIG.repoId, TEST_CONFIG.documentId, payload)
-  if (validationResult.ok) {
-    return
-  }
   const reason = (validationResult.json && (validationResult.json.reason || validationResult.json.message)) || validationResult.text || ''
   const isOriginOrRefererBlock = validationResult.status === 403 && /invalid origin|invalid referer|origin|referer/i.test(reason)
-  if (isOriginOrRefererBlock) {
-    console.log('  ⚠️  Validate returned 403 (origin/referer). Payload was built correctly; run from the app origin or allow the test origin in your instance.')
-    return
+  if (!validationResult.ok) {
+    if (isOriginOrRefererBlock) {
+      console.log('  ⚠️  Validate returned 403 (origin/referer). Payload was built correctly; run from the app origin or allow the test origin in your instance.')
+      return
+    }
+    assert(false, `Validate endpoint rejected payload: ${validationResult.status} ${reason}`)
   }
-  assert(false, `Validate endpoint rejected payload: ${validationResult.status} ${reason}`)
+
+  // Test full save flow: PUT o2m with current values (no edits)
+  const validationResponse = validationResult.json
+  const storeObj = validationResponse?.storeObject ?? payload?.storeObject ?? {}
+  const o2mPayload = buildO2mPayloadFromValidationResponse(validationResponse, {
+    filename: storeObj.filename ?? payload?.storeObject?.filename ?? '',
+    sourceCategory: objectDefinitionId ?? categoryId ?? ''
+  })
+  assert(o2mPayload != null, 'buildO2mPayloadFromValidationResponse should return payload')
+  console.log('  📤 PUT o2m (save with current values)...')
+  const saveResult = await putO2mUpdate({
+    base,
+    repoId: TEST_CONFIG.repoId,
+    dmsObjectId: TEST_CONFIG.documentId,
+    payload: o2mPayload,
+    apiKey: TEST_CONFIG.apiKey || undefined
+  })
+  if (!saveResult.ok) {
+    const saveReason = (saveResult.json && (saveResult.json.reason || saveResult.json.message)) || saveResult.text || ''
+    const saveBlock = saveResult.status === 403 && /invalid origin|invalid referer|origin|referer/i.test(saveReason)
+    if (saveBlock) {
+      console.log('  ⚠️  PUT o2m returned 403 (origin/referer). Validate + o2m payload were built correctly.')
+      return
+    }
+    assert(false, `PUT o2m (save) failed: ${saveResult.status} ${saveReason}`)
+  }
+  console.log('  ✅ Validate + PUT o2m (save with current values) succeeded')
 }
 
 export { runTests, loadTestConfig }
