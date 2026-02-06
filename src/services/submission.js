@@ -174,12 +174,15 @@ export function buildValidationPayload ({
   displayValue,
   filename
 } = {}) {
+  displayValue = displayValue ?? o2Response?.storeObject?.displayValue ?? o2Response?.displayValue ?? ''
+  filename = filename ?? o2Response?.storeObject?.filename ?? o2Response?.filename ?? ''
+
   const numericCatId = objectDefinitionId || getNumericIdFromUuid(idMap, categoryId) || categoryId
 
   const systemProperties = {}
   if (srmItem) {
     const srmIdx = buildSrmValueIndex(srmItem)
-    const sysProps = ['property_document_number', 'property_variant_number', 'property_colorcode']
+    const sysProps = ['property_document_number', 'property_variant_number', 'property_editor', 'property_colorcode']
     sysProps.forEach(key => {
       const val = srmIdx[key]
       if (val != null) systemProperties[key] = val
@@ -422,19 +425,26 @@ export function buildSourcePropertiesFromValidationResponse (validationResponse,
   return { properties }
 }
 
+/** systemProperties keys to include in update payload (match should payload). */
+const UPDATE_SYSTEM_PROPERTY_KEYS = ['property_document_number', 'property_variant_number', 'property_editor', 'property_colorcode']
+
 /**
  * Ensure payload values match expected types for PUT /o2/{documentId}.
- * Should payload: type number, systemProperties/extendedProperties/multivalue values strings, storeObject.id number 0.
+ * Should payload: type number, systemProperties (4 keys only), extendedProperties/multivalue values strings, storeObject.id number 0.
  */
 function normalizeUpdatePayloadTypes (validationResponse, storeObject, { metaIdx, idMap } = {}) {
+  const mvep = validationResponse.multivalueExtendedProperties || {}
+  const rawSys = validationResponse.systemProperties || {}
   const systemProperties = {}
-  for (const [k, v] of Object.entries(validationResponse.systemProperties || {})) {
+  for (const k of UPDATE_SYSTEM_PROPERTY_KEYS) {
+    let v = rawSys[k]
+    if (k === 'property_colorcode' && v === undefined && validationResponse.colorCode != null) {
+      v = validationResponse.colorCode
+    }
     systemProperties[k] = v == null ? '' : String(v)
   }
-  if (validationResponse.colorCode != null && systemProperties.property_colorcode === undefined) {
-    systemProperties.property_colorcode = String(validationResponse.colorCode)
-  }
 
+  const mvep = validationResponse.multivalueExtendedProperties || {}
   const extendedProperties = {}
   const ext = validationResponse.extendedProperties || {}
   for (const [numericId, v] of Object.entries(ext)) {
@@ -449,11 +459,24 @@ function normalizeUpdatePayloadTypes (validationResponse, storeObject, { metaIdx
         str = String(v)
       }
     }
+    if (str === '' && mvep[numericId] && typeof mvep[numericId] === 'object' && !Array.isArray(mvep[numericId])) {
+      const slotMap = mvep[numericId]
+      const slots = Object.keys(slotMap).filter(k => /^\d+$/.test(String(k))).sort((a, b) => Number(a) - Number(b))
+      const first = slots.map(s => slotMap[s]).find(val => val != null && String(val).trim() !== '')
+      str = first != null ? String(first).trim() : ''
+    }
     extendedProperties[numericId] = str
+  }
+  for (const numericId of Object.keys(mvep)) {
+    if (extendedProperties[numericId] !== undefined) continue
+    const slotMap = mvep[numericId]
+    if (!slotMap || typeof slotMap !== 'object' || Array.isArray(slotMap)) continue
+    const slots = Object.keys(slotMap).filter(k => /^\d+$/.test(String(k))).sort((a, b) => Number(a) - Number(b))
+    const first = slots.map(s => slotMap[s]).find(val => val != null && String(val).trim() !== '')
+    extendedProperties[numericId] = first != null ? String(first).trim() : ''
   }
 
   const multivalueExtendedProperties = {}
-  const mvep = validationResponse.multivalueExtendedProperties || {}
   for (const [numericId, slotMap] of Object.entries(mvep)) {
     if (!slotMap || typeof slotMap !== 'object' || Array.isArray(slotMap)) {
       multivalueExtendedProperties[numericId] = {}

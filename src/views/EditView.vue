@@ -544,6 +544,7 @@ export default {
         }
         const objectDefinitionId = this.categoryId.simpleId || getNumericIdFromUuid(this.idMap, this.categoryId.uniqueId)
         const categoryIdForPayload = this.categoryId.uniqueId || this.categoryId.simpleId
+        const o2 = this.raw.o2Response || {}
         const validationPayload = buildValidationPayload({
           base: this.base,
           repoId: this.repoId,
@@ -554,10 +555,10 @@ export default {
           metaIdx: this.metaIdx,
           catPropsArr: this.categoryProperties,
           idMap: this.idMap,
-          o2Response: this.raw.o2Response,
+          o2Response: o2,
           srmItem: this.raw.srmItem,
-          displayValue: '',
-          filename: ''
+          displayValue: o2?.storeObject?.displayValue ?? o2?.displayValue ?? '',
+          filename: o2?.storeObject?.filename ?? o2?.filename ?? ''
         })
 
         const lockTokenResult = await Dv.getLockToken(this.base, this.repoId, this.docId)
