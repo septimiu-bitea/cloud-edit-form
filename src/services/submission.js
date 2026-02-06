@@ -553,18 +553,38 @@ export function buildO2mPayload ({
 }
 
 /**
+ * Build multipart/form-data body with a single part "data" containing the JSON payload.
+ * Matches production: multipart/form-data; boundary=----geckoformboundary...
+ */
+function buildMultipartFormDataBody (payload) {
+  const boundary = '----geckoformboundary' + Array.from(crypto.getRandomValues(new Uint8Array(16)))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('')
+  const json = JSON.stringify(payload)
+  const body = [
+    `--${boundary}`,
+    'Content-Disposition: form-data; name="data"',
+    '',
+    json,
+    `--${boundary}--`
+  ].join('\r\n')
+  return { body, contentType: `multipart/form-data; boundary=${boundary}` }
+}
+
+/**
  * PUT /dms/r/{repoId}/o2/{documentId} – full document update. Returns { ok, status, json, text }.
- * Body is the full document payload (built from validate response + storeObject).
+ * Body is multipart/form-data with one part "data" containing the full document payload (built from validate response + storeObject).
  */
 export async function putO2Update ({ base, repoId, documentId, payload, apiKey }) {
   const url = `${base}/dms/r/${encodeURIComponent(repoId)}/o2/${encodeURIComponent(documentId)}`
-  const headers = { 'Content-Type': 'application/json', Accept: 'application/hal+json, application/json;q=0.9' }
+  const { body, contentType } = buildMultipartFormDataBody(payload)
+  const headers = { 'Content-Type': contentType, Accept: 'application/json, text/plain, */*' }
   if (apiKey) headers.Authorization = `Bearer ${apiKey}`
   const res = await fetch(url, {
     method: 'PUT',
     credentials: apiKey ? 'omit' : 'include',
     headers,
-    body: JSON.stringify(payload)
+    body
   })
   const text = await res.text()
   let json = null
