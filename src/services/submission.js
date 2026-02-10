@@ -4,7 +4,7 @@
  */
 import { getNumericIdFromUuid } from '@/utils/idMapping'
 import { multivalueToValues } from '@/utils/multivalueParsing'
-import { coerceValueForType, toISODateTimeIfPossible } from '@/utils/valueCoercion'
+import { coerceValueForType } from '@/utils/valueCoercion'
 import { buildO2ValueIndex, buildSrmValueIndex } from '@/utils/valueExtraction'
 
 /**
@@ -182,11 +182,11 @@ export function buildValidationPayload ({
   const systemProperties = {}
   if (srmItem) {
     const srmIdx = buildSrmValueIndex(srmItem)
-    for (const key of Object.keys(srmIdx)) {
-      if (key.startsWith('property_') && srmIdx[key] != null) {
-        systemProperties[key] = toISODateTimeIfPossible(srmIdx[key])
-      }
-    }
+    const sysProps = ['property_document_number', 'property_variant_number', 'property_editor', 'property_colorcode']
+    sysProps.forEach(key => {
+      const val = srmIdx[key]
+      if (val != null) systemProperties[key] = val
+    })
   }
 
   const formData = (form?.submission?.data) ? form.submission.data : {}
@@ -433,22 +433,22 @@ export function buildSourcePropertiesFromValidationResponse (validationResponse,
   return { properties }
 }
 
+/** systemProperties keys to include in update payload (match should payload). */
+const UPDATE_SYSTEM_PROPERTY_KEYS = ['property_document_number', 'property_variant_number', 'property_editor', 'property_colorcode']
+
 /**
  * Ensure payload values match expected types for PUT /o2/{documentId}.
- * systemProperties: all keys from validation response that start with property_.
  */
 function normalizeUpdatePayloadTypes (validationResponse, storeObject, { metaIdx, idMap } = {}) {
   const mvep = validationResponse.multivalueExtendedProperties || {}
   const rawSys = validationResponse.systemProperties || {}
   const systemProperties = {}
-  for (const k of Object.keys(rawSys)) {
-    if (!k.startsWith('property_')) continue
+  for (const k of UPDATE_SYSTEM_PROPERTY_KEYS) {
     let v = rawSys[k]
     if (k === 'property_colorcode' && v === undefined && validationResponse.colorCode != null) {
       v = validationResponse.colorCode
     }
-    const str = v == null ? '' : String(v)
-    systemProperties[k] = str ? toISODateTimeIfPossible(str) : ''
+    systemProperties[k] = v == null ? '' : String(v)
   }
 
   const extendedProperties = {}
