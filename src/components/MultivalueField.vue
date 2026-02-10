@@ -1,19 +1,31 @@
 <template>
   <v-card 
     variant="outlined" 
-    class="pa-3"
+    class="pa-3 d-flex flex-column"
     :class="{ 'multivalue-field-error': error }"
     :data-field-uuid="dataFieldUuid"
   >
-    <div class="text-subtitle-2 mb-2" :class="error ? 'text-error' : 'text-medium-emphasis'">
-      {{ displayLabel }}
-      <span v-if="error" class="text-error text-caption ml-1">({{ t(currentLocale, 'fieldRequired') || 'Required' }})</span>
+    <div class="d-flex align-center justify-between mb-2" style="gap: 8px; width: 100%;">
+      <div class="text-subtitle-2" style="min-width: 0; flex: 1;" :class="error ? 'text-error' : 'text-medium-emphasis'">
+        {{ displayLabel }}
+        <span v-if="error" class="text-error text-caption ml-1">({{ t(currentLocale, 'fieldRequired') || 'Required' }})</span>
+      </div>
+      <v-btn
+        v-if="!readonly"
+        size="small"
+        variant="outlined"
+        color="error"
+        :disabled="entries.length === 0"
+        @click="onClear"
+      >
+        <v-icon start size="small">mdi-delete-sweep</v-icon>
+        {{ t(currentLocale, 'clear') }}
+      </v-btn>
     </div>
 
-    <v-row dense class="multivalue-layout">
-      <!-- Left column: chips + add input beneath -->
-      <v-col cols="12" md="6" class="d-flex flex-column">
-        <div class="multivalue-chips mb-2" style="min-height: 32px;">
+    <v-row dense>
+      <v-col cols="12" class="d-flex flex-column" style="gap: 8px;">
+        <div class="multivalue-chips d-flex align-center flex-wrap" style="gap: 4px; min-height: 32px;">
           <template v-if="entries.length > 0">
             <v-chip
               v-for="entry in entries"
@@ -30,80 +42,51 @@
           </template>
           <span v-else-if="readonly" class="text-medium-emphasis text-body2">—</span>
         </div>
-        <template v-if="!readonly">
-          <div class="d-flex align-center flex-wrap" style="gap: 8px;">
-            <v-text-field
-              v-model="pendingInput"
-              :placeholder="addPlaceholder"
-              density="compact"
-              hide-details
-              variant="outlined"
-              class="multivalue-add-input"
-              style="max-width: 280px; min-width: 140px; flex: 1;"
-              @keydown.enter.prevent="commitAdd"
-            />
-            <v-btn
-              size="small"
-              variant="tonal"
-              color="primary"
-              :disabled="!hasPendingValue"
-              @click="commitAdd"
-            >
-              <v-icon start size="small">mdi-plus</v-icon>
-              {{ t(currentLocale, 'add') }}
-            </v-btn>
-          </div>
-        </template>
-      </v-col>
-
-      <!-- Right column: Paste/Clear + Import (aligned right) -->
-      <v-col v-if="!readonly" cols="12" md="6" class="d-flex flex-column align-end">
-        <div class="d-flex align-center flex-wrap justify-end mb-2" style="gap: 8px;">
+        <div v-if="!readonly" class="d-flex align-center flex-wrap" style="gap: 8px;">
+          <v-text-field
+            v-model="pendingInput"
+            :placeholder="addPlaceholder"
+            density="compact"
+            hide-details
+            variant="outlined"
+            class="multivalue-add-input"
+            style="max-width: 280px; min-width: 140px; flex: 1;"
+            @keydown.enter.prevent="commitAdd"
+          />
           <v-btn
             size="small"
-            variant="outlined"
-            color="secondary"
-            @click="onPaste"
+            variant="tonal"
+            color="primary"
+            :disabled="!hasPendingValue"
+            @click="commitAdd"
           >
-            <v-icon start size="small">mdi-content-paste</v-icon>
-            {{ t(currentLocale, 'paste') }}
-          </v-btn>
-            <v-btn
-              size="small"
-              variant="outlined"
-              color="error"
-              :disabled="entries.length === 0"
-              @click="onClear"
-            >
-            <v-icon start size="small">mdi-delete-sweep</v-icon>
-            {{ t(currentLocale, 'clear') }}
+            <v-icon start size="small">mdi-plus</v-icon>
+            {{ t(currentLocale, 'add') }}
           </v-btn>
         </div>
-        <template v-if="importFromDoc">
-          <div class="d-flex align-center flex-wrap justify-end" style="gap: 8px;">
-            <v-text-field
-              v-model="importDocId"
-              :placeholder="t(currentLocale, 'importFromDocPlaceholder')"
-              density="compact"
-              hide-details
-              variant="outlined"
-              style="max-width: 260px; min-width: 140px; flex: 1;"
-              :disabled="importLoading"
-              @keydown.enter.prevent="doImport"
-            />
-            <v-btn
-              size="small"
-              variant="tonal"
-              color="primary"
-              :loading="importLoading"
-              :disabled="!importDocIdTrimmed"
-              @click="doImport"
-            >
-              <v-icon start size="small">mdi-file-import</v-icon>
-              {{ t(currentLocale, 'import') }}
-            </v-btn>
-          </div>
-        </template>
+        <div v-if="!readonly && importFromDoc" class="d-flex align-center flex-wrap" style="gap: 8px;">
+          <v-text-field
+            v-model="importDocId"
+            :placeholder="t(currentLocale, 'importFromDocPlaceholder')"
+            density="compact"
+            hide-details
+            variant="outlined"
+            style="max-width: 260px; min-width: 140px; flex: 1;"
+            :disabled="importLoading"
+            @keydown.enter.prevent="doImport"
+          />
+          <v-btn
+            size="small"
+            variant="tonal"
+            color="primary"
+            :loading="importLoading"
+            :disabled="!importDocIdTrimmed"
+            @click="doImport"
+          >
+            <v-icon start size="small">mdi-file-import</v-icon>
+            {{ t(currentLocale, 'import') }}
+          </v-btn>
+        </div>
       </v-col>
     </v-row>
 
@@ -122,7 +105,7 @@
 <script>
 import { t } from '@/utils/i18n'
 import { log, warn } from '@/utils/debug'
-import { parseInputLine, parsePasteText, toKeyedEntries, multivalueToValues, generateMultivalueKey } from '@/utils/multivalueParsing'
+import { parseInputLine, toKeyedEntries, multivalueToValues, generateMultivalueKey } from '@/utils/multivalueParsing'
 
 export default {
   name: 'MultivalueField',
@@ -257,25 +240,6 @@ export default {
       if (!raw) return
       this.parseAndAdd(raw)
       this.pendingInput = ''
-    },
-    onPaste () {
-      if (typeof navigator?.clipboard?.readText !== 'function') {
-        this.showSnackbar(this.t(this.currentLocale, 'pasteNotAvailable'), 'warning')
-        return
-      }
-      navigator.clipboard.readText().then((text) => {
-        const tokens = parsePasteText(text, this.delimiter)
-        if (tokens.length === 0) {
-          this.showSnackbar(this.t(this.currentLocale, 'noValuesInClipboard'), 'info')
-          return
-        }
-        const newEntries = tokens.map(v => ({ key: generateMultivalueKey(), value: String(v ?? '') }))
-        const next = [...this.entries, ...newEntries]
-        this.$emit('update:modelValue', next)
-        this.showSnackbar(this.t(this.currentLocale, 'pastedNValues', tokens.length), 'success')
-      }).catch((err) => {
-        this.showSnackbar(this.t(this.currentLocale, 'pasteFailed', err?.message || String(err)), 'error')
-      })
     },
     onClear () {
       this.$emit('update:modelValue', [])
