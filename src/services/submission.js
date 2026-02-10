@@ -4,7 +4,7 @@
  */
 import { getNumericIdFromUuid } from '@/utils/idMapping'
 import { multivalueToValues } from '@/utils/multivalueParsing'
-import { coerceValueForType } from '@/utils/valueCoercion'
+import { coerceValueForType, toISODateTimeIfPossible } from '@/utils/valueCoercion'
 import { buildO2ValueIndex, buildSrmValueIndex } from '@/utils/valueExtraction'
 
 /**
@@ -183,7 +183,9 @@ export function buildValidationPayload ({
   if (srmItem) {
     const srmIdx = buildSrmValueIndex(srmItem)
     for (const key of Object.keys(srmIdx)) {
-      if (key.startsWith('property_') && srmIdx[key] != null) systemProperties[key] = srmIdx[key]
+      if (key.startsWith('property_') && srmIdx[key] != null) {
+        systemProperties[key] = toISODateTimeIfPossible(srmIdx[key])
+      }
     }
   }
 
@@ -445,7 +447,8 @@ function normalizeUpdatePayloadTypes (validationResponse, storeObject, { metaIdx
     if (k === 'property_colorcode' && v === undefined && validationResponse.colorCode != null) {
       v = validationResponse.colorCode
     }
-    systemProperties[k] = v == null ? '' : String(v)
+    const str = v == null ? '' : String(v)
+    systemProperties[k] = str ? toISODateTimeIfPossible(str) : ''
   }
 
   const extendedProperties = {}
