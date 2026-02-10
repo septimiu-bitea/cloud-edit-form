@@ -182,11 +182,9 @@ export function buildValidationPayload ({
   const systemProperties = {}
   if (srmItem) {
     const srmIdx = buildSrmValueIndex(srmItem)
-    const sysProps = ['property_document_number', 'property_variant_number', 'property_editor', 'property_colorcode']
-    sysProps.forEach(key => {
-      const val = srmIdx[key]
-      if (val != null) systemProperties[key] = val
-    })
+    for (const key of Object.keys(srmIdx)) {
+      if (key.startsWith('property_') && srmIdx[key] != null) systemProperties[key] = srmIdx[key]
+    }
   }
 
   const formData = (form?.submission?.data) ? form.submission.data : {}
@@ -275,7 +273,13 @@ export function buildValidationPayload ({
         nextSlot++
       })
       if (Object.keys(valuesObj).length === 0) valuesObj['1'] = ''
-      multivalueExtendedProperties[numericId] = valuesObj
+      // Move empty strings to the end (e.g. a,b,c delete b -> a,c,"")
+      const slotKeys = Object.keys(valuesObj).filter(k => /^\d+$/.test(String(k))).sort((a, b) => Number(a) - Number(b))
+      const vals = slotKeys.map(k => (valuesObj[k] != null ? String(valuesObj[k]).trim() : ''))
+      const compacted = [...vals.filter(v => v !== ''), ...vals.filter(v => v === '')]
+      const out = {}
+      compacted.forEach((v, i) => { out[String(i + 1)] = v })
+      multivalueExtendedProperties[numericId] = out
     } else {
       const prevSingle = prevMap[formDataKey] ?? prevMap[propId]
       const currVal = raw != null ? norm(raw, dt) : (prevSingle != null ? norm(prevSingle, dt) : '')
@@ -427,18 +431,16 @@ export function buildSourcePropertiesFromValidationResponse (validationResponse,
   return { properties }
 }
 
-/** systemProperties keys to include in update payload (match should payload). */
-const UPDATE_SYSTEM_PROPERTY_KEYS = ['property_document_number', 'property_variant_number', 'property_editor', 'property_colorcode']
-
 /**
  * Ensure payload values match expected types for PUT /o2/{documentId}.
- * Should payload: type number, systemProperties (4 keys only), extendedProperties/multivalue values strings, storeObject.id number 0.
+ * systemProperties: all keys from validation response that start with property_.
  */
 function normalizeUpdatePayloadTypes (validationResponse, storeObject, { metaIdx, idMap } = {}) {
   const mvep = validationResponse.multivalueExtendedProperties || {}
   const rawSys = validationResponse.systemProperties || {}
   const systemProperties = {}
-  for (const k of UPDATE_SYSTEM_PROPERTY_KEYS) {
+  for (const k of Object.keys(rawSys)) {
+    if (!k.startsWith('property_')) continue
     let v = rawSys[k]
     if (k === 'property_colorcode' && v === undefined && validationResponse.colorCode != null) {
       v = validationResponse.colorCode
