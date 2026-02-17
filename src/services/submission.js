@@ -597,10 +597,16 @@ export function buildO2mPayloadFromValidationResponse (validationResponse, {
   }
   for (const [numericId, slotMap] of Object.entries(mvep)) {
     if (!slotMap || typeof slotMap !== 'object' || Array.isArray(slotMap)) continue
-    const slots = Object.keys(slotMap)
+    const slotNumbers = Object.keys(slotMap)
       .filter(k => /^\d+$/.test(String(k)))
-      .sort((a, b) => Number(a) - Number(b))
-    const values = slots.map(s => (slotMap[s] != null ? String(slotMap[s]) : ''))
+      .map(k => Number(k))
+    const maxSlot = slotNumbers.length ? Math.max(...slotNumbers) : 0
+    // API is position-based: values[i] = slot (i+1). Dense array so e.g. slot 9 cleared = values[8] = ''.
+    const values = Array.from({ length: maxSlot }, (_, i) => {
+      const slotKey = String(i + 1)
+      const v = slotMap[slotKey]
+      return v != null ? String(v).trim() : ''
+    })
     if (seen.has(numericId)) {
       const idx = properties.findIndex(p => p.key === numericId)
       if (idx !== -1) properties[idx].values = values
