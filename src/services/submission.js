@@ -275,12 +275,13 @@ export function buildValidationPayload ({
         nextSlot++
       })
       if (Object.keys(valuesObj).length === 0) valuesObj['1'] = ''
-      // Move empty strings to the end (e.g. a,b,c delete b -> a,c,"")
+      // Keys come from GET (prevSlotKeys). Send every key; deleted slots get "" so validate knows to clear them.
       const slotKeys = Object.keys(valuesObj).filter(k => /^\d+$/.test(String(k))).sort((a, b) => Number(a) - Number(b))
-      const vals = slotKeys.map(k => (valuesObj[k] != null ? String(valuesObj[k]).trim() : ''))
-      const compacted = [...vals.filter(v => v !== ''), ...vals.filter(v => v === '')]
       const out = {}
-      compacted.forEach((v, i) => { out[String(i + 1)] = v })
+      slotKeys.forEach(k => {
+        const v = valuesObj[k]
+        out[k] = v != null ? String(v).trim() : ''
+      })
       multivalueExtendedProperties[numericId] = out
     } else {
       const prevSingle = prevMap[formDataKey] ?? prevMap[propId]
