@@ -237,36 +237,25 @@ export function buildValidationPayload ({
       const curr = normalizeMulti(raw, dt)
       const prevSlotMap = prevSlotMaps[formDataKey] ?? prevSlotMaps[propId]
       let prevSlotKeys
-      let prevArr
       if (prevSlotMap && typeof prevSlotMap === 'object' && !Array.isArray(prevSlotMap)) {
         prevSlotKeys = Object.keys(prevSlotMap)
           .filter(k => /^\d+$/.test(String(k)))
           .sort((a, b) => Number(a) - Number(b))
-        prevArr = prevSlotKeys.map(k => (prevSlotMap[k] != null ? String(prevSlotMap[k]).trim() : ''))
       }
       if (!prevSlotKeys || prevSlotKeys.length === 0) {
         const prevVal = prevMap[formDataKey] ?? prevMap[propId]
         const prevVals = Array.isArray(prevVal) ? multivalueToValues(prevVal) : []
-        prevArr = prevVals.map(v => norm(v, dt)).filter(v => v !== '')
-        prevSlotKeys = prevArr.map((_, idx) => String(idx + 1))
+        const prevArrDense = prevVals.map(v => norm(v, dt)).filter(v => v !== '')
+        prevSlotKeys = prevArrDense.map((_, idx) => String(idx + 1))
       }
+      // Index-based repack: curr[i] maps to prevSlotKeys[i]; trailing prior slots get "".
+      // Avoids middle holes (e.g. 1:"01",2:"",3:"03"); order is positional only.
       const valuesObj = {}
-      const remaining = curr.slice()
-      const slots = prevArr.map(prevVal => {
-        const matchIdx = remaining.findIndex(c => c === prevVal)
-        if (matchIdx !== -1) {
-          const matched = remaining[matchIdx]
-          remaining.splice(matchIdx, 1)
-          return matched
-        }
-        return null
-      })
-      for (let i = 0; i < slots.length; i++) {
-        if (slots[i] === null && remaining.length > 0) slots[i] = remaining.shift()
+      for (let i = 0; i < prevSlotKeys.length; i++) {
+        const slotKey = prevSlotKeys[i]
+        valuesObj[slotKey] = i < curr.length ? curr[i] : ''
       }
-      prevSlotKeys.forEach((slotKey, idx) => {
-        valuesObj[slotKey] = slots[idx] != null ? slots[idx] : ''
-      })
+      const remaining = curr.slice(prevSlotKeys.length)
       let nextSlot = prevSlotKeys.length
         ? Math.max(...prevSlotKeys.map(k => Number(k)), 0) + 1
         : 1
@@ -387,6 +376,9 @@ export function extractValuesFromValidationResponse (validationResponse, { idMap
       }
     } else {
       coercedArr = arr
+    }
+    while (coercedArr.length > 0 && (coercedArr[coercedArr.length - 1] === '' || coercedArr[coercedArr.length - 1] == null)) {
+      coercedArr.pop()
     }
     values[uuid] = coercedArr.map((v, i) => ({ key: `mv-${uuid}-${i}`, value: v }))
   }

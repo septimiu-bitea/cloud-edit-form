@@ -6,7 +6,7 @@
 // Run in browser: npm run dev, then open http://localhost:5173/tests/validation-payload.html
 // Use test.config.js or the form on that page to run integration tests with real API data.
 
-import { buildValidationPayload, buildO2mPayloadFromValidationResponse, putO2mUpdate, toMetaIndex, makePrevMap } from '@/services/submission'
+import { buildValidationPayload, buildO2mPayloadFromValidationResponse, extractValuesFromValidationResponse, putO2mUpdate, toMetaIndex, makePrevMap } from '@/services/submission'
 import { createApi } from '@/services/api'
 import { idToUniqueIdFromSrm, mapIdtoUniqueId, getNumericIdFromUuid } from '@/utils/idMapping'
 import { buildInitialValuesFromO2 } from '@/utils/valueExtraction'
@@ -187,6 +187,91 @@ test('buildValidationPayload: includes multivalueExtendedProperties when formDat
     ['A', 'B', 'C'],
     'multivalue values should match formData[uuid-161]'
   )
+})
+
+test('buildValidationPayload: index repack after middle delete (uses prevSlotMap)', () => {
+  const idMap = { '161': 'uuid-161' }
+  const catPropsArr = [
+    { id: '161', dataType: 'STRING', isMultiValue: true, isSystemProperty: false, readOnly: false }
+  ]
+  const metaIdx = toMetaIndex(catPropsArr, { idMap })
+  const form = {
+    submission: {
+      data: {
+        'uuid-161': ['01', '03']
+      }
+    },
+    _o2mPrev: { 'uuid-161': ['01', '02', '03'] },
+    _o2mPrevSlotMap: {
+      'uuid-161': { 1: '01', 2: '02', 3: '03' }
+    }
+  }
+
+  const payload = buildValidationPayload({
+    documentId: 'DOC001',
+    objectDefinitionId: '9e332',
+    form,
+    metaIdx,
+    catPropsArr,
+    idMap
+  })
+
+  const m = payload.multivalueExtendedProperties['161']
+  assertEqual(
+    [m['1'], m['2'], m['3']],
+    ['01', '03', ''],
+    'middle delete should repack into lower slots and clear last slot'
+  )
+})
+
+test('buildValidationPayload: index repack with non-consecutive slot keys', () => {
+  const idMap = { '161': 'uuid-161' }
+  const catPropsArr = [
+    { id: '161', dataType: 'STRING', isMultiValue: true, isSystemProperty: false, readOnly: false }
+  ]
+  const metaIdx = toMetaIndex(catPropsArr, { idMap })
+  const form = {
+    submission: {
+      data: {
+        'uuid-161': ['x']
+      }
+    },
+    _o2mPrev: {},
+    _o2mPrevSlotMap: {
+      'uuid-161': { 6: 'x', 7: 'y' }
+    }
+  }
+
+  const payload = buildValidationPayload({
+    documentId: 'DOC001',
+    objectDefinitionId: '9e332',
+    form,
+    metaIdx,
+    catPropsArr,
+    idMap
+  })
+
+  const m = payload.multivalueExtendedProperties['161']
+  assert(m['6'] === 'x' && m['7'] === '', 'slot 6 gets first curr; slot 7 cleared')
+})
+
+test('extractValuesFromValidationResponse: strips trailing empty multivalue slots', () => {
+  const idMap = { '161': 'uuid-161' }
+  const catPropsArr = [
+    { id: '161', dataType: 'STRING', isMultiValue: true, isSystemProperty: false, readOnly: false }
+  ]
+  const validationResponse = {
+    multivalueExtendedProperties: {
+      161: { 1: '01', 2: '03', 3: '' }
+    }
+  }
+  const values = extractValuesFromValidationResponse(validationResponse, {
+    idMap,
+    catPropsArr
+  })
+  const entries = values['uuid-161']
+  assert(Array.isArray(entries) && entries.length === 2, 'should drop trailing empty slot')
+  assert(entries[0].value === '01' && entries[1].value === '03', 'remaining values in order')
 })
 
 test('buildValidationPayload: fallback formData[propId] when keyed by numeric id', () => {
