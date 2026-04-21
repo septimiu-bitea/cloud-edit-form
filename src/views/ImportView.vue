@@ -21,10 +21,7 @@
       <div class="import-view-body">
         <transition :name="pilotSuggestLoading ? 'form-shell-none' : 'form-shell'" appear>
           <div class="import-form-root">
-            <div
-              class="import-form-shell"
-              :class="{ 'import-pilot-no-field-motion': pilotSuggestLoading }"
-            >
+            <div class="import-form-shell">
               <div class="import-file-ai-row mb-4">
                 <div class="import-file-ai-field">
                   <v-file-input
@@ -75,93 +72,100 @@
                   :label="t(locale, 'importCategoryLabel')"
                   variant="outlined"
                   density="comfortable"
-                  class="mb-4"
+                  class="import-category-select"
                   clearable
                   color="primary"
                   :disabled="importLoading || pilotSuggestLoading"
                   @update:model-value="onCategoryIdChange"
                 />
 
-                <template v-if="selectedCategoryId">
-                  <transition name="progress-slide" mode="out-in">
-                    <v-progress-linear
-                      v-if="uploadProgress != null"
-                      key="up"
-                      :model-value="Number(uploadProgress)"
-                      color="primary"
-                      height="8"
-                      rounded
-                      class="mt-2 mb-2"
-                    />
-                  </transition>
-
-                  <transition
-                    :name="pilotSuggestLoading ? 'form-shell-none' : 'form-shell'"
-                    mode="out-in"
+                <transition name="import-category-panel" appear mode="out-in">
+                  <div
+                    v-if="selectedCategoryId"
+                    :key="selectedCategoryId"
+                    class="import-category-stack"
                   >
-                    <div
-                      v-if="categoryPropsLoading && !pilotSuggestLoading"
-                      key="cat-loading"
-                      class="import-fields-panel py-8 text-center"
+                    <transition
+                      :name="pilotSuggestLoading ? 'form-shell-none' : 'form-shell'"
+                      mode="out-in"
                     >
-                      <v-progress-circular
-                        indeterminate
-                        color="primary"
-                        size="52"
-                        width="4"
-                        class="mb-4"
+                      <div
+                        v-if="categoryPropsLoading && !pilotSuggestLoading"
+                        key="cat-loading"
+                        class="import-fields-panel py-8 text-center"
+                      >
+                        <v-progress-circular
+                          indeterminate
+                          color="primary"
+                          size="52"
+                          width="4"
+                          class="mb-4"
+                        />
+                        <p class="text-body-1 text-medium-emphasis mb-1">
+                          {{ t(locale, 'importCategoryFieldsLoading') }}
+                        </p>
+                        <p class="text-body-2 text-medium-emphasis mb-0 import-subtle">
+                          {{ t(locale, 'importCategoryFieldsLoadingSub') }}
+                        </p>
+                      </div>
+                      <CategoryFormView
+                        v-else-if="!categoryPropsLoading && categoryPropertiesFiltered.length"
+                        :key="'cat-form-' + selectedCategoryId"
+                        v-model="formData"
+                        :properties="categoryPropertiesFiltered"
+                        :id-map="idMap"
+                        :current-locale="locale"
+                        delimiter=";"
+                        :fetch-property-values-from-doc="fetchPropertyValuesFromDoc"
+                        :invalid-fields="invalidFields"
+                        :locked="pilotSuggestLoading"
+                        show-required-hints
+                        :dataset-options-by-data-set-id="datasetOptionsByDataSetId"
+                        @field-updated="onFieldUpdated"
                       />
-                      <p class="text-body-1 text-medium-emphasis mb-1">
-                        {{ t(locale, 'importCategoryFieldsLoading') }}
-                      </p>
-                      <p class="text-body-2 text-medium-emphasis mb-0 import-subtle">
-                        {{ t(locale, 'importCategoryFieldsLoadingSub') }}
-                      </p>
-                    </div>
-                    <CategoryFormView
-                      v-else-if="!categoryPropsLoading && categoryPropertiesFiltered.length"
-                      key="cat-form"
-                      v-model="formData"
-                      :properties="categoryPropertiesFiltered"
-                      :id-map="idMap"
-                      :current-locale="locale"
-                      delimiter=";"
-                      :fetch-property-values-from-doc="fetchPropertyValuesFromDoc"
-                      :invalid-fields="invalidFields"
-                      :locked="pilotSuggestLoading"
-                      show-required-hints
-                      :dataset-options-by-data-set-id="datasetOptionsByDataSetId"
-                      @field-updated="onFieldUpdated"
-                    />
-                    <v-alert
-                      v-else-if="!categoryPropsLoading"
-                      key="no-props"
-                      type="info"
-                      variant="tonal"
-                      rounded="0"
-                      class="mb-0"
-                      border="start"
-                    >
-                      {{ t(locale, 'importNoProperties') }}
-                    </v-alert>
-                  </transition>
-                </template>
+                      <v-alert
+                        v-else-if="!categoryPropsLoading"
+                        key="no-props"
+                        type="info"
+                        variant="tonal"
+                        rounded="0"
+                        class="mb-0"
+                        border="start"
+                      >
+                        {{ t(locale, 'importNoProperties') }}
+                      </v-alert>
+                    </transition>
+                  </div>
+                </transition>
 
-                <div
-                  v-if="resolvedFile && selectedCategoryId"
-                  class="import-submit-row d-flex justify-end mt-4 pt-2"
-                >
-                  <v-btn
-                    color="primary"
-                    size="large"
-                    class="px-6 import-footer-import-btn"
-                    :loading="importLoading"
-                    :disabled="importImportDisabled"
-                    @click="runImport"
+                <transition name="import-submit-btn">
+                  <div
+                    v-if="showImportSubmitButton"
+                    class="import-submit-row d-flex justify-end mt-4 pt-2"
                   >
-                    {{ t(locale, 'importSubmit') }}
-                  </v-btn>
-                </div>
+                    <div class="import-submit-btn-wrap">
+                      <v-btn
+                        color="primary"
+                        size="large"
+                        class="px-6 import-footer-import-btn"
+                        :disabled="importImportDisabled"
+                        :aria-busy="importLoading"
+                        @click="runImport"
+                      >
+                        {{ importSubmitButtonLabel }}
+                      </v-btn>
+                      <v-progress-linear
+                        v-if="importLoading"
+                        class="import-btn-ltr-progress"
+                        :model-value="uploadProgressForLinear"
+                        :indeterminate="importLinearIndeterminate"
+                        height="3"
+                        rounded
+                        color="primary"
+                      />
+                    </div>
+                  </div>
+                </transition>
               </template>
             </div>
           </div>
@@ -386,11 +390,35 @@ export default {
       }
       return true
     },
+    /** Import CTA only after category fields are loaded and there is at least one field to show. */
+    showImportSubmitButton () {
+      return !!(
+        this.resolvedFile &&
+        this.selectedCategoryId &&
+        !this.categoryPropsLoading &&
+        this.categoryPropertiesFiltered.length > 0
+      )
+    },
     importImportDisabled () {
       if (this.importLoading || this.pilotSuggestLoading || this.pageLoading || this.pageError) return true
-      if (!this.resolvedFile || !this.selectedCategoryId) return true
-      if (this.categoryPropsLoading) return true
+      if (!this.showImportSubmitButton) return true
       return !this.mandatorySatisfied
+    },
+    /** Upload % and create phase text live on the import button (no separate progress bar). */
+    importSubmitButtonLabel () {
+      if (!this.importLoading) return this.t(this.locale, 'importSubmit')
+      if (this.uploadProgress != null) {
+        return this.t(this.locale, 'importUploadingPercent', Math.round(Number(this.uploadProgress)))
+      }
+      return this.t(this.locale, 'importCreatingDocument')
+    },
+    /** Bottom LTR strip on import button: real % while chunking, indeterminate while creating. */
+    uploadProgressForLinear () {
+      if (this.uploadProgress == null) return undefined
+      return Math.min(100, Math.max(0, Number(this.uploadProgress)))
+    },
+    importLinearIndeterminate () {
+      return this.importLoading && this.uploadProgress == null
     }
   },
   async mounted () {
@@ -813,6 +841,7 @@ export default {
             this.uploadProgress = Number(percent)
           }
         })
+        this.uploadProgress = null
 
         const payload = buildO2mCreatePayload({
           repoId: this.repoId,
@@ -900,8 +929,37 @@ export default {
   position: relative;
   overflow: hidden;
 }
+/* No Vuetify :loading — avoids extra spinner + width jump; only bottom bar + disabled state */
 .import-footer-import-btn {
   flex-shrink: 0;
+  min-width: 15rem;
+}
+.import-submit-btn-wrap :deep(.import-footer-import-btn) {
+  /* Stable width while label switches (Uploading % / Creating…) */
+  justify-content: center;
+}
+/* LTR load strip along bottom of import button (determinate % or indeterminate sweep) */
+.import-submit-btn-wrap {
+  position: relative;
+  display: inline-flex;
+  max-width: 100%;
+  border-radius: 4px;
+  overflow: hidden;
+  vertical-align: middle;
+}
+.import-btn-ltr-progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  margin: 0 !important;
+  z-index: 2;
+  pointer-events: none;
+  border-radius: 0 !important;
+}
+.import-submit-btn-wrap :deep(.import-btn-ltr-progress .v-progress-linear__background),
+.import-submit-btn-wrap :deep(.import-btn-ltr-progress .v-progress-linear__buffer) {
+  opacity: 0.35;
 }
 .import-view-body {
   flex: 1;
@@ -920,10 +978,49 @@ export default {
 .import-form-shell {
   overflow: visible !important;
 }
-/* While Pilot overlay is up: no category-field stagger (app-motion.css) */
-.import-pilot-no-field-motion :deep(.category-form-animate .field-col-animate) {
-  animation: none !important;
-  animation-delay: 0s !important;
+/* Panel below category select: fade + rise when a type is chosen */
+.import-category-panel-enter-active {
+  transition:
+    opacity 0.4s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.import-category-panel-enter-from {
+  opacity: 0;
+  transform: translateY(8px);
+}
+.import-category-panel-leave-active {
+  transition: opacity 0.22s ease, transform 0.22s ease;
+}
+.import-category-panel-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+.import-category-stack {
+  min-height: 0;
+  margin-top: 0;
+  padding-top: 0;
+}
+.import-category-select {
+  margin-bottom: 4px !important;
+}
+/* Import CTA: fade + slide when fields become available (or leave when category cleared / loading) */
+.import-submit-btn-enter-active,
+.import-submit-btn-leave-active {
+  transition:
+    opacity 0.34s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.34s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.import-submit-btn-enter-from {
+  opacity: 0;
+  transform: translateY(12px);
+}
+.import-submit-btn-leave-to {
+  opacity: 0;
+  transform: translateY(-8px);
+}
+/* Tight gap: category control → first field row (CategoryFormView adds mt-1 on cols) */
+.import-category-stack :deep(.category-form-animate .v-row:first-child .field-col-animate) {
+  margin-top: 0 !important;
 }
 /* Disable form-shell transitions so they do not compete with Pilot overlay */
 .form-shell-none-enter-active,
@@ -1095,6 +1192,26 @@ export default {
   }
 }
 @media (prefers-reduced-motion: reduce) {
+  .import-category-panel-enter-active,
+  .import-category-panel-leave-active {
+    transition-duration: 0.12s !important;
+  }
+  .import-category-panel-enter-from,
+  .import-category-panel-leave-to {
+    transform: none !important;
+  }
+  .import-submit-btn-enter-active,
+  .import-submit-btn-leave-active {
+    transition-duration: 0.12s !important;
+  }
+  .import-submit-btn-enter-from,
+  .import-submit-btn-leave-to {
+    transform: none !important;
+  }
+  .import-submit-btn-wrap :deep(.v-progress-linear__indeterminate .long),
+  .import-submit-btn-wrap :deep(.v-progress-linear__indeterminate .short) {
+    animation: none !important;
+  }
   .import-pilot-matrix-bg {
     animation: none;
   }

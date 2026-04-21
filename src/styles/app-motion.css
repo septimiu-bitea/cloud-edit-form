@@ -51,21 +51,28 @@
   transform-origin: top center;
 }
 
-/* Category fields: light stagger (CategoryFormView sets --stagger on each col) */
+/* Category fields: staggered slide-in (CategoryFormView sets --stagger on each col) */
 @keyframes category-field-rise {
   from {
     opacity: 0;
-    transform: translateY(12px);
+    transform: translate3d(-14px, 16px, 0);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translate3d(0, 0, 0);
   }
 }
 
 .category-form-animate .field-col-animate {
-  animation: category-field-rise 0.42s cubic-bezier(0.22, 1, 0.36, 1) backwards;
-  animation-delay: calc(min(var(--stagger, 0), 24) * 35ms);
+  animation: category-field-rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  animation-delay: calc(min(var(--stagger, 0), 28) * 42ms);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .category-form-animate .field-col-animate {
+    animation: none !important;
+    animation-delay: 0s !important;
+  }
 }
 
 /* Card elevation softens on hover (embedded panels) */
