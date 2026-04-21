@@ -1,27 +1,30 @@
 <template>
-  <v-card class="import-view-card surface-card" elevation="4">
-    <PoweredByStrip :locale="locale">
+  <div class="import-view-root">
+    <PoweredByStrip :locale="locale" variant="flat">
       <template #prepend>
         <span class="text-h6 font-weight-semibold">{{ t(locale, 'importViewTitle') }}</span>
       </template>
     </PoweredByStrip>
 
-    <v-card-text v-if="pageLoading" class="import-view-body">
+    <div v-if="pageLoading" class="import-view-body">
       <div class="import-state-block">
         <v-progress-linear indeterminate color="primary" rounded height="6" class="mb-2" />
         <p class="text-body-2 text-medium-emphasis text-center mb-0">{{ t(locale, 'importPageLoadingHint') }}</p>
       </div>
-    </v-card-text>
-    <v-card-text v-else-if="pageError" class="import-view-body">
-      <v-alert type="error" variant="tonal" class="mb-0 rounded-lg" border="start">
+    </div>
+    <div v-else-if="pageError" class="import-view-body">
+      <v-alert type="error" variant="tonal" class="mb-0 rounded-0" border="start">
         {{ pageError }}
       </v-alert>
-    </v-card-text>
+    </div>
     <div v-else class="import-body-wrap">
-      <v-card-text class="import-view-body">
-        <transition name="form-shell" appear>
+      <div class="import-view-body">
+        <transition :name="pilotSuggestLoading ? 'form-shell-none' : 'form-shell'" appear>
           <div class="import-form-root">
-            <div class="import-form-shell">
+            <div
+              class="import-form-shell"
+              :class="{ 'import-pilot-no-field-motion': pilotSuggestLoading }"
+            >
               <div class="import-file-ai-row mb-4">
                 <div class="import-file-ai-field">
                   <v-file-input
@@ -92,9 +95,12 @@
                     />
                   </transition>
 
-                  <transition name="form-shell" mode="out-in">
+                  <transition
+                    :name="pilotSuggestLoading ? 'form-shell-none' : 'form-shell'"
+                    mode="out-in"
+                  >
                     <div
-                      v-if="categoryPropsLoading"
+                      v-if="categoryPropsLoading && !pilotSuggestLoading"
                       key="cat-loading"
                       class="import-fields-panel py-8 text-center"
                     >
@@ -113,7 +119,7 @@
                       </p>
                     </div>
                     <CategoryFormView
-                      v-else-if="categoryPropertiesFiltered.length"
+                      v-else-if="!categoryPropsLoading && categoryPropertiesFiltered.length"
                       key="cat-form"
                       v-model="formData"
                       :properties="categoryPropertiesFiltered"
@@ -124,14 +130,15 @@
                       :invalid-fields="invalidFields"
                       :locked="pilotSuggestLoading"
                       show-required-hints
+                      :dataset-options-by-data-set-id="datasetOptionsByDataSetId"
                       @field-updated="onFieldUpdated"
                     />
                     <v-alert
-                      v-else
+                      v-else-if="!categoryPropsLoading"
                       key="no-props"
                       type="info"
                       variant="tonal"
-                      rounded="lg"
+                      rounded="0"
                       class="mb-0"
                       border="start"
                     >
@@ -159,7 +166,7 @@
             </div>
           </div>
         </transition>
-      </v-card-text>
+      </div>
 
       <transition name="pilot-overlay">
         <div
@@ -194,7 +201,7 @@
     <v-snackbar v-model="snackbar.show" :color="snackbar.color" :timeout="4000" location="bottom">
       {{ snackbar.text }}
     </v-snackbar>
-  </v-card>
+  </div>
 </template>
 
 <script>
@@ -204,10 +211,13 @@ import { createApi, usedRepoId } from '@/services/api'
 import {
   uploadFileInChunks,
   createDocumentO2M,
+  extractDocumentIdFromO2mResponse,
   buildO2mCreatePayload,
   applyCategoryMandatoryFlags,
-  resolveAfterImportUrl
+  resolveAfterImportUrl,
+  sanitizeImportFormDatasetValues
 } from '@/services/documentImport'
+import { fetchCloudDatasetOptionsMap } from '@/services/datasetOptionsCloud'
 import {
   fileToBase64Url,
   buildPilotPromptBody,
@@ -270,7 +280,9 @@ export default {
       /** Terminal-style lines for Pilot overlay */
       pilotLogLines: [],
       /** Same as Pilot-allowed MIME + extensions; OS file dialog filter + import validation */
-      pilotFileAccept: PILOT_FILE_ACCEPT
+      pilotFileAccept: PILOT_FILE_ACCEPT,
+      /** Cloud: `dataSetId` → `{ label, value }[]` for value-list fields */
+      datasetOptionsByDataSetId: {}
     }
   },
   watch: {
@@ -287,6 +299,12 @@ export default {
           }
         })
       }
+    },
+    datasetOptionsByDataSetId: {
+      handler () {
+        this.applyDatasetSanitize()
+      },
+      deep: true
     }
   },
   computed: {
@@ -388,6 +406,16 @@ export default {
     onFieldUpdated (uuid) {
       const i = this.invalidFields.indexOf(uuid)
       if (i > -1) this.invalidFields.splice(i, 1)
+    },
+    /** Drop AI/pasted values that are not valid dataset keys (or label match). */
+    applyDatasetSanitize () {
+      if (this.onPremise || !this.catPropsArr.length) return
+      this.formData = sanitizeImportFormDatasetValues(
+        this.formData,
+        this.catPropsArr,
+        this.idMap,
+        this.datasetOptionsByDataSetId
+      )
     },
     validateMandatory () {
       this.invalidFields = []
@@ -502,6 +530,7 @@ export default {
       this.invalidFields = []
       this.catPropsArr = []
       this.metaIdx = null
+      this.datasetOptionsByDataSetId = {}
       this.categoryPropsLoading = false
       if (id == null || id === '') return
       await this.loadCategoryProperties(id)
@@ -524,9 +553,30 @@ export default {
         }
         this.catPropsArr = arr
         this.metaIdx = toMetaIndex(arr, { idMap: this.idMap })
+        this.datasetOptionsByDataSetId = {}
+        if (!this.onPremise && arr.length) {
+          try {
+            this.datasetOptionsByDataSetId = await fetchCloudDatasetOptionsMap({
+              base: this.base,
+              repoId: this.repoId,
+              catPropsArr: arr,
+              locale: this.locale,
+              apiKey: this.apiKey
+            })
+          } catch (e) {
+            error('[ImportView] dataset options failed', e)
+          }
+        }
+        this.formData = sanitizeImportFormDatasetValues(
+          this.formData,
+          this.catPropsArr,
+          this.idMap,
+          this.datasetOptionsByDataSetId
+        )
       } catch (e) {
         this.catPropsArr = []
         this.metaIdx = null
+        this.datasetOptionsByDataSetId = {}
         this.snackbar = {
           show: true,
           text: e?.message || String(e),
@@ -688,7 +738,12 @@ export default {
         if (!parsed2) throw new Error(this.t(this.locale, 'importPilotBadJson'))
         this.pilotPushLog('importPilotLogMerge')
         const patch = pilotPropertiesToFormData(parsed2, propList, this.idMap)
-        this.formData = { ...this.formData, ...patch }
+        this.formData = sanitizeImportFormDatasetValues(
+          { ...this.formData, ...patch },
+          this.catPropsArr,
+          this.idMap,
+          this.datasetOptionsByDataSetId
+        )
         await this.$nextTick()
         this.validateMandatory()
         this.lastPilotCategoryId = this.selectedCategoryId
@@ -766,7 +821,8 @@ export default {
           fileName,
           formData: this.formData,
           catPropsArr: this.catPropsArr,
-          idMap: this.idMap
+          idMap: this.idMap,
+          datasetOptionsByDataSetId: this.datasetOptionsByDataSetId
         })
 
         const result = await createDocumentO2M({
@@ -781,8 +837,13 @@ export default {
           throw new Error(msg)
         }
 
-        const documentId = result.json?.id || result.json?.dmsObjectId || null
+        const documentId = extractDocumentIdFromO2mResponse(result)
         if (!documentId) {
+          log('[ImportView] o2m ok but no document id', {
+            status: result.status,
+            json: result.json,
+            text: result.text?.slice(0, 400)
+          })
           throw new Error(this.t(this.locale, 'importNoDocumentId'))
         }
 
@@ -817,7 +878,7 @@ export default {
 </script>
 
 <style scoped>
-.import-view-card {
+.import-view-root {
   width: 100%;
   min-width: 720px;
   max-width: 1440px;
@@ -827,6 +888,9 @@ export default {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
 }
 .import-body-wrap {
   flex: 1;
@@ -844,6 +908,8 @@ export default {
   min-height: 0;
   overflow: auto;
   scroll-behavior: smooth;
+  /* Padding formerly from v-card-text */
+  padding: 16px 24px;
 }
 .import-state-block {
   padding: 0.5rem 0 1rem;
@@ -853,6 +919,21 @@ export default {
 }
 .import-form-shell {
   overflow: visible !important;
+}
+/* While Pilot overlay is up: no category-field stagger (app-motion.css) */
+.import-pilot-no-field-motion :deep(.category-form-animate .field-col-animate) {
+  animation: none !important;
+  animation-delay: 0s !important;
+}
+/* Disable form-shell transitions so they do not compete with Pilot overlay */
+.form-shell-none-enter-active,
+.form-shell-none-leave-active {
+  transition: none !important;
+}
+.form-shell-none-enter-from,
+.form-shell-none-leave-to {
+  opacity: 1;
+  transform: none;
 }
 .import-pilot-overlay-full {
   position: absolute;

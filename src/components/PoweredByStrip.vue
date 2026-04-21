@@ -1,7 +1,10 @@
 <template>
   <div
     class="powered-by-strip"
-    :class="{ 'powered-by-strip--split': $slots.prepend }"
+    :class="{
+      'powered-by-strip--split': $slots.prepend,
+      'powered-by-strip--flat': variant === 'flat'
+    }"
   >
     <div v-if="$slots.prepend" class="powered-by-strip-prepend">
       <slot name="prepend" />
@@ -41,6 +44,11 @@ export default {
     locale: {
       type: String,
       default: 'en'
+    },
+    /** `flat`: no panel background (e.g. import without card wrapper). */
+    variant: {
+      type: String,
+      default: 'default'
     }
   },
   data () {
@@ -68,6 +76,9 @@ export default {
 .powered-by-strip-prepend {
   flex: 1 1 auto;
   min-width: 0;
+}
+.powered-by-strip--flat {
+  background: transparent;
 }
 .powered-by-logo {
   height: 32px;

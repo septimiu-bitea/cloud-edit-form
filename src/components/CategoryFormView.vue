@@ -10,9 +10,49 @@
         class="mt-1 field-col-animate"
         :style="{ '--stagger': index }"
       >
+        <!-- Value list (cloud): single -->
+        <v-select
+          v-if="fieldType(prop) === 'select'"
+          :model-value="currentValue(prop.id)"
+          :items="selectItems(prop)"
+          item-title="label"
+          item-value="value"
+          :label="fieldLabel(prop)"
+          :readonly="fieldMeta(prop).readOnly"
+          :disabled="fieldMeta(prop).readOnly || locked"
+          :error="fieldHasRequiredError(prop)"
+          :error-messages="fieldHasRequiredError(prop) ? (t(currentLocale, 'fieldRequired') || 'This field is required') : ''"
+          variant="outlined"
+          density="comfortable"
+          hide-details="auto"
+          clearable
+          :data-field-uuid="resolveUuid(prop.id)"
+          @update:model-value="emitField(prop.id, $event ?? '')"
+        />
+        <!-- Value list (cloud): multi -->
+        <v-select
+          v-else-if="fieldType(prop) === 'multiselect'"
+          :model-value="multiValues(prop.id)"
+          :items="selectItems(prop)"
+          item-title="label"
+          item-value="value"
+          :label="fieldLabel(prop)"
+          multiple
+          chips
+          closable-chips
+          :readonly="fieldMeta(prop).readOnly"
+          :disabled="fieldMeta(prop).readOnly || locked"
+          :error="fieldHasRequiredError(prop)"
+          :error-messages="fieldHasRequiredError(prop) ? (t(currentLocale, 'fieldRequired') || 'This field is required') : ''"
+          variant="outlined"
+          density="comfortable"
+          hide-details="auto"
+          :data-field-uuid="resolveUuid(prop.id)"
+          @update:model-value="handleMultivalueUpdate(prop.id, Array.isArray($event) ? $event : ($event == null ? [] : [$event]))"
+        />
         <!-- Text / default -->
         <v-text-field
-          v-if="fieldType(prop) === 'text'"
+          v-else-if="fieldType(prop) === 'text'"
           :model-value="currentValue(prop.id)"
           :label="fieldLabel(prop)"
           :readonly="fieldMeta(prop).readOnly"
@@ -165,6 +205,13 @@ export default {
     showRequiredHints: {
       type: Boolean,
       default: false
+    },
+    /**
+     * Cloud value lists: keys = property `dataSetId` (or property id), values = `{ label, value }[]` (`value` = API stored key).
+     */
+    datasetOptionsByDataSetId: {
+      type: Object,
+      default: () => ({})
     }
   },
   emits: ['update:modelValue', 'submit', 'field-updated'],
@@ -183,7 +230,24 @@ export default {
       return toFieldMeta(prop, { locale: this.currentLocale })
     },
     fieldType (prop) {
-      return fieldTypeForDataType(prop.dataType, { isMulti: !!prop.isMultiValue })
+      const isMulti = !!prop.isMultiValue
+      const has =
+        !!prop.hasValueList || !!String(prop.dataSetId || '').trim()
+      if (!has) {
+        return fieldTypeForDataType(prop.dataType, { isMulti })
+      }
+      const items = this.selectItems(prop)
+      if (isMulti) {
+        if (!items.length) return fieldTypeForDataType(prop.dataType, { isMulti: true, hasValueList: false })
+        return 'multiselect'
+      }
+      if (!items.length) return fieldTypeForDataType(prop.dataType, { isMulti: false, hasValueList: false })
+      return 'select'
+    },
+    selectItems (prop) {
+      const dsId = String(this.fieldMeta(prop).dataSetId || prop.id || '').trim()
+      const m = dsId ? this.datasetOptionsByDataSetId[dsId] : null
+      return Array.isArray(m) ? m : []
     },
     fieldLabel (prop) {
       const meta = this.fieldMeta(prop)

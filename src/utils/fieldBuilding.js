@@ -30,9 +30,12 @@ export function toFieldMeta (p, { locale = 'en' } = {}) {
 }
 
 /**
- * Vuetify component type from dataType + isMulti. One of: 'text', 'number', 'date', 'datetime', 'checkbox', 'select', 'multitext'.
+ * Vuetify component type from dataType + isMulti + hasValueList.
+ * One of: 'text', 'number', 'date', 'datetime', 'checkbox', 'select', 'multiselect', 'multitext'.
  */
-export function fieldTypeForDataType (dataType, { isMulti = false } = {}) {
+export function fieldTypeForDataType (dataType, { isMulti = false, hasValueList = false } = {}) {
+  if (hasValueList && isMulti) return 'multiselect'
+  if (hasValueList && !isMulti) return 'select'
   const dt = String(dataType).toUpperCase()
   if (isMulti) return dt === 'BOOLEAN' ? 'checkbox' : 'multitext'
   switch (dt) {

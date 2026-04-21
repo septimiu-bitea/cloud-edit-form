@@ -64,6 +64,18 @@ export function createApi ({ base, locale = 'en', apiKey, onPremise = false } = 
     return { raw: r.json, arr: Array.isArray(arr) ? arr : [] }
   }
 
+  /** GET single dataset (cloud) — includes `values` for value lists. */
+  const dataset = async (baseUrl, repoId, datasetId) => {
+    const idStr = String(datasetId ?? '').trim()
+    if (!idStr) return { raw: null, item: null }
+    const r = await j(
+      `${baseUrl}/dmsconfig/r/${encodeURIComponent(repoId)}/objectmanagement/datasets/${encodeURIComponent(idStr)}`,
+      { headers: { Accept: 'application/json', 'Accept-Language': locale || 'en' } }
+    )
+    const item = r.json && typeof r.json === 'object' ? r.json : null
+    return { raw: r.json, item }
+  }
+
   const objdefs = async (baseUrl, repoId) => {
     const r = await j(
       `${baseUrl}/dms/r/${encodeURIComponent(repoId)}/objdef`,
@@ -343,6 +355,7 @@ export function createApi ({ base, locale = 'en', apiKey, onPremise = false } = 
     catProps,
     allProps,
     datasets,
+    dataset,
     objdefs,
     categories,
     srm,

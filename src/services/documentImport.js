@@ -1,7 +1,13 @@
 /**
  * Document import: chunked blob upload + POST /o2m create (aligned with on_prod alpma.js).
  */
-import { coerceValueForType } from '../utils/valueCoercion.js'
+import {
+  coerceValueForType,
+  mapInitialToDatasetValue,
+  mapInitialArrayToDatasetValues,
+  coerceDatasetValueStrict,
+  coerceDatasetMultiStrict
+} from '../utils/valueCoercion.js'
 import { categoryOnlyProperties, buildRequiredFromCategoryPropertyRefs } from '../utils/systemProperties.js'
 
 const SEP_RE = /[;,|]/
@@ -199,9 +205,131 @@ export async function createDocumentO2M ({ base, repoId, payload, apiKey } = {})
   return { ok: res.ok, status: res.status, headers: res.headers, json, text }
 }
 
+/**
+ * Parse document id from O2M create response. Some tenants return 201 with the id only in
+ * Location / Content-Location or HAL _links, not as top-level json.id.
+ */
+export function extractDocumentIdFromO2mResponse ({ json, headers, text } = {}) {
+  const normalizeId = (v) => {
+    if (v == null || v === '') return null
+    const s = String(v).trim()
+    return s || null
+  }
+
+  const idFromHref = (href) => {
+    if (typeof href !== 'string' || !href) return null
+    try {
+      const u = href.includes('://') ? new URL(href) : new URL(href, 'http://local.placeholder')
+      const m = u.pathname.match(/\/o2\/([^/]+)/i)
+      if (m) return decodeURIComponent(m[1])
+    } catch { /* ignore */ }
+    return null
+  }
+
+  const directFromObject = (obj) => {
+    if (!obj || typeof obj !== 'object') return null
+    let id = normalizeId(
+      obj.id ?? obj.dmsObjectId ?? obj.documentId ?? obj.dms_object_id
+    )
+    if (id) return id
+    const store = obj.storeObject ?? obj.dmsObject
+    if (store && typeof store === 'object') {
+      id = normalizeId(store.id ?? store.dmsObjectId)
+      if (id) return id
+    }
+    const href =
+      obj._links?.self?.href ||
+      obj._links?.['o2:self']?.href ||
+      obj._links?.o2?.href
+    id = idFromHref(href)
+    if (id) return id
+    const emb = obj._embedded
+    if (emb && typeof emb === 'object') {
+      for (const v of Object.values(emb)) {
+        if (v && typeof v === 'object') {
+          id = normalizeId(v.id ?? v.dmsObjectId ?? v.documentId)
+          if (id) return id
+        }
+      }
+    }
+    return null
+  }
+
+  const fromObject = (obj) => {
+    if (!obj || typeof obj !== 'object') return null
+    let id = directFromObject(obj)
+    if (id) return id
+    const wrap = obj.result ?? obj.data
+    if (wrap && typeof wrap === 'object' && !Array.isArray(wrap)) {
+      id = directFromObject(wrap)
+      if (id) return id
+    }
+    return null
+  }
+
+  if (json != null) {
+    if (Array.isArray(json) && json.length > 0) {
+      const id = fromObject(json[0])
+      if (id) return id
+    } else if (typeof json === 'object') {
+      const id = fromObject(json)
+      if (id) return id
+    }
+  }
+
+  if (headers && typeof headers.get === 'function') {
+    const loc = headers.get('Location') || headers.get('Content-Location')
+    if (loc) {
+      const id = idFromHref(loc)
+      if (id) return id
+    }
+  }
+
+  if (text && typeof text === 'string') {
+    const t = text.trim()
+    if (t && !/[\s{[]/.test(t) && t.length <= 200) return t
+  }
+
+  return null
+}
+
 const norm = (v, dt) => {
   const c4 = coerceValueForType(v, dt)
   return (c4 == null ? '' : String(c4)).trim()
+}
+
+function datasetOptsForProp (p, datasetOptionsByDataSetId) {
+  if (!datasetOptionsByDataSetId || typeof datasetOptionsByDataSetId !== 'object') return []
+  const dsKey = String(p.dataSetId || p.id || '').trim()
+  if (!dsKey) return []
+  const opts = datasetOptionsByDataSetId[dsKey]
+  return Array.isArray(opts) ? opts : []
+}
+
+/**
+ * Clear or fix value-list fields when AI / paste sent a string that is not in the dataset.
+ * Only runs where `datasetOptionsByDataSetId` has entries for that property.
+ */
+export function sanitizeImportFormDatasetValues (formData = {}, catPropsArr = [], idMap = {}, datasetOptionsByDataSetId = {}) {
+  const out = { ...formData }
+  const props = categoryOnlyProperties(catPropsArr || [])
+  for (const p of props) {
+    if (p.readOnly || p.isSystemProperty) continue
+    const pid = p.id != null ? String(p.id) : ''
+    if (!pid) continue
+    const uuid = idMap[pid] || pid
+    const opts = datasetOptsForProp(p, datasetOptionsByDataSetId)
+    if (!opts.length) continue
+    const raw = out[uuid]
+    if (raw == null || raw === '') continue
+    if (Array.isArray(raw) && raw.length === 0) continue
+    if (p.isMultiValue) {
+      out[uuid] = coerceDatasetMultiStrict(raw, opts)
+    } else {
+      out[uuid] = coerceDatasetValueStrict(raw, opts)
+    }
+  }
+  return out
 }
 
 const normalizeMulti = (raw, dt) => {
@@ -224,8 +352,9 @@ const normalizeMulti = (raw, dt) => {
 /**
  * Map formData + category props → sourceProperties.properties for create payload.
  * Keys sent to API: property UUID (idMap[numericId] || id).
+ * @param {Record<string, { label: string, value: string }[]>} [datasetOptionsByDataSetId] — cloud value lists; labels are mapped to stored keys.
  */
-export function buildImportSourceProperties (formData = {}, catPropsArr = [], idMap = {}) {
+export function buildImportSourceProperties (formData = {}, catPropsArr = [], idMap = {}, datasetOptionsByDataSetId = {}) {
   const properties = []
   const props = categoryOnlyProperties(catPropsArr || [])
 
@@ -238,21 +367,29 @@ export function buildImportSourceProperties (formData = {}, catPropsArr = [], id
     const storageKey = propKey
     const raw = formData[storageKey]
     if (raw == null || raw === '') continue
+    if (Array.isArray(raw) && raw.length === 0) continue
 
     const dt = String(p?.dataType || 'STRING').toUpperCase()
     const isMulti = !!p?.isMultiValue
+    const opts = datasetOptsForProp(p, datasetOptionsByDataSetId)
 
     if (isMulti) {
-      const curr = normalizeMulti(raw, dt)
+      let curr = normalizeMulti(raw, dt)
+      if (opts.length) {
+        curr = mapInitialArrayToDatasetValues(curr, opts)
+      }
       if (curr.length === 0) continue
       const tooLong = curr.find(v => toUtf8Bytes(v) > 255)
       if (tooLong) throw new Error(`Value exceeds 255 bytes for property ${propKey}`)
       properties.push({ key: propKey, values: curr })
     } else {
-      const currVal = norm(raw, dt)
+      let currVal = norm(raw, dt)
+      if (opts.length) {
+        currVal = mapInitialToDatasetValue(currVal, opts)
+      }
       if (currVal === '') continue
-      if (toUtf8Bytes(currVal) > 255) throw new Error(`Value exceeds 255 bytes for property ${propKey}`)
-      properties.push({ key: propKey, values: [currVal] })
+      if (toUtf8Bytes(String(currVal)) > 255) throw new Error(`Value exceeds 255 bytes for property ${propKey}`)
+      properties.push({ key: propKey, values: [String(currVal)] })
     }
   }
 
@@ -283,11 +420,12 @@ export function buildO2mCreatePayload ({
   formData = {},
   catPropsArr = [],
   idMap = {},
+  datasetOptionsByDataSetId = {},
   displayValue = null,
   alterationText,
   sourceId = null
 } = {}) {
-  const properties = buildImportSourceProperties(formData, catPropsArr, idMap)
+  const properties = buildImportSourceProperties(formData, catPropsArr, idMap, datasetOptionsByDataSetId)
   const alterationResolved =
     alterationText != null && String(alterationText).trim() !== ''
       ? String(alterationText).trim()
