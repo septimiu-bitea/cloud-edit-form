@@ -41,26 +41,28 @@
                     color="primary"
                   />
                 </div>
-                <div v-if="resolvedFile" class="import-pilot-col">
-                  <v-tooltip location="top" :text="t(locale, 'importPilotSuggest')">
-                    <template #activator="{ props: tipProps }">
-                      <v-btn
-                        v-bind="tipProps"
-                        icon
-                        variant="tonal"
-                        color="secondary"
-                        size="x-large"
-                        class="quantum-pilot-wrap import-pilot-btn flex-shrink-0"
-                        :aria-label="t(locale, 'importPilotSuggest')"
-                        :disabled="!canPilotSuggest"
-                        :loading="pilotSuggestLoading"
-                        @click="runPilotSuggest"
-                      >
-                        <v-icon size="26">mdi-robot-outline</v-icon>
-                      </v-btn>
-                    </template>
-                  </v-tooltip>
-                </div>
+                <transition name="import-pilot-btn" appear>
+                  <div v-if="resolvedFile" class="import-pilot-col">
+                    <v-tooltip location="top" :text="t(locale, 'importPilotSuggest')">
+                      <template #activator="{ props: tipProps }">
+                        <v-btn
+                          v-bind="tipProps"
+                          icon
+                          variant="tonal"
+                          color="secondary"
+                          size="x-large"
+                          class="quantum-pilot-wrap import-pilot-btn flex-shrink-0"
+                          :aria-label="t(locale, 'importPilotSuggest')"
+                          :disabled="!canPilotSuggest"
+                          :loading="pilotSuggestLoading"
+                          @click="runPilotSuggest"
+                        >
+                          <v-icon size="26">mdi-robot-outline</v-icon>
+                        </v-btn>
+                      </template>
+                    </v-tooltip>
+                  </div>
+                </transition>
               </div>
 
               <template v-if="resolvedFile">
@@ -1150,12 +1152,12 @@ export default {
 .import-fields-panel {
   min-height: 140px;
 }
-/* Plain flex (not v-row/v-col) so align-items: center matches file + AI reliably */
+/* File row: pilot column top-aligned with file field */
 .import-file-ai-row {
   display: flex;
   flex-direction: row;
   flex-wrap: wrap;
-  align-items: center;
+  align-items: flex-start;
   gap: 12px;
   padding: 0.75rem 1rem;
   box-sizing: border-box;
@@ -1165,10 +1167,25 @@ export default {
   flex: 1 1 220px;
   min-width: 0;
 }
+/* AI suggest button: enter/leave when a file is chosen */
+.import-pilot-btn-enter-active,
+.import-pilot-btn-leave-active {
+  transition:
+    opacity 0.36s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.36s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.import-pilot-btn-enter-from {
+  opacity: 0;
+  transform: translateY(10px) scale(0.94);
+}
+.import-pilot-btn-leave-to {
+  opacity: 0;
+  transform: translateY(-6px) scale(0.96);
+}
 .import-pilot-col {
   flex: 0 0 auto;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: flex-end;
   overflow: visible !important;
 }
@@ -1198,6 +1215,14 @@ export default {
   }
   .import-category-panel-enter-from,
   .import-category-panel-leave-to {
+    transform: none !important;
+  }
+  .import-pilot-btn-enter-active,
+  .import-pilot-btn-leave-active {
+    transition-duration: 0.14s !important;
+  }
+  .import-pilot-btn-enter-from,
+  .import-pilot-btn-leave-to {
     transform: none !important;
   }
   .import-submit-btn-enter-active,
