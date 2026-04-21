@@ -22,6 +22,7 @@
         {{ t(currentLocale, 'clear') }}
       </v-btn>
     </div>
+    <p v-if="hint" class="text-caption text-medium-emphasis mb-2">{{ hint }}</p>
 
     <v-row dense>
       <v-col cols="12" class="d-flex flex-column" style="gap: 8px;">
@@ -146,6 +147,11 @@ export default {
     },
     /** Optional: data attribute for field UUID (used for scrolling to invalid fields). */
     dataFieldUuid: {
+      type: String,
+      default: ''
+    },
+    /** Optional helper under the title (e.g. required hint). */
+    hint: {
       type: String,
       default: ''
     }

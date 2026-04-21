@@ -1,11 +1,13 @@
 import { createApp } from 'vue'
 import App from './App.vue'
 import vuetify from './plugins/vuetify'
+import './styles/app-motion.css'
 import { log } from './utils/debug'
 
 /**
  * ECM formInit contract: the host sets window.__formInitContext before loading this script.
- * Context contains: { form, base, uiLocale, data, mountEl }.
+ * Context contains: { mode: 'edit'|'import', form, base, uiLocale, data, mountEl, ... }.
+ * Mode is set by scripts/loading.js vs scripts/loading.import.js on the host page.
  */
 let context = typeof window !== 'undefined' ? window.__formInitContext : null
 
@@ -16,10 +18,16 @@ const docId = (import.meta.env.VITE_DOCUMENT_ID || '').trim()
 const onPremise = import.meta.env.VITE_ON_PREMISE === 'true' || import.meta.env.VITE_ON_PREMISE === '1'
 const allowBypassRequiredFields = import.meta.env.VITE_ALLOW_BYPASS_REQUIRED_FIELDS === 'true' || import.meta.env.VITE_ALLOW_BYPASS_REQUIRED_FIELDS === '1'
 if (!context && import.meta.env.DEV && baseUrl) {
+  const devMode = (import.meta.env.VITE_FORM_MODE || 'edit').trim() === 'import' ? 'import' : 'edit'
+  const devData = {}
+  if (docId) devData.docId = docId
+  const presetCat = (import.meta.env.VITE_IMPORT_CATEGORY_ID || '').trim()
+  if (presetCat && devMode === 'import') devData.categoryId = presetCat
   context = {
+    mode: devMode,
     base: '/api', // proxy in vite.config.js forwards /api -> VITE_BASE_URL
     uiLocale: 'en',
-    data: docId ? { docId } : {},
+    data: devData,
     mountEl: null,
     onPremise: onPremise,
     repoId: import.meta.env.VITE_REPO_ID || null,
@@ -27,8 +35,10 @@ if (!context && import.meta.env.DEV && baseUrl) {
   }
   if (typeof window !== 'undefined') window.__formInitContext = context
   log('[vue-app] Mock context from .env.local:', {
+    mode: context.mode,
     base: context.base + ' -> ' + baseUrl,
     docId: context.data.docId || '(none)',
+    categoryId: context.data.categoryId || '(none)',
     onPremise: context.onPremise,
     repoId: context.repoId || '(auto-detect)',
     allowBypassRequiredFields: context.allowBypassRequiredFields

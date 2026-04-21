@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ImportView — build checklist</title>
+  <style>
+    :root {
+      --bg: #0f1419;
+      --surface: #1a2332;
+      --border: #2d3a4d;
+      --text: #e7ecf3;
+      --muted: #8b9cb3;
+      --accent: #3d8bfd;
+      --accent-dim: #2a5fad;
+      --ok: #3fb950;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.45;
+    }
+    header {
+      padding: 1rem 1.25rem;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      position: sticky;
+      top: 0;
+      z-index: 2;
+    }
+    header h1 {
+      margin: 0 0 0.35rem;
+      font-size: 1.15rem;
+      font-weight: 600;
+    }
+    header p { margin: 0; color: var(--muted); font-size: 0.875rem; }
+    .wrap { max-width: 720px; margin: 0 auto; padding: 1rem 1.25rem 3rem; }
+    .steps {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem;
+      margin-bottom: 1.25rem;
+    }
+    .steps button {
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--muted);
+      padding: 0.4rem 0.65rem;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.8rem;
+    }
+    .steps button:hover { border-color: var(--accent-dim); color: var(--text); }
+    .steps button.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+    .panel {
+      display: none;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.1rem 1.25rem;
+      margin-bottom: 1rem;
+    }
+    .panel.visible { display: block; }
+    .panel h2 {
+      margin: 0 0 0.75rem;
+      font-size: 1rem;
+      font-weight: 600;
+    }
+    .panel .hint { color: var(--muted); font-size: 0.85rem; margin: -0.35rem 0 1rem; }
+    ul.checks {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+    ul.checks li {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.6rem;
+      padding: 0.45rem 0;
+      border-bottom: 1px solid var(--border);
+    }
+    ul.checks li:last-child { border-bottom: none; }
+    ul.checks input {
+      margin-top: 0.2rem;
+      width: 1.05rem;
+      height: 1.05rem;
+      accent-color: var(--accent);
+      flex-shrink: 0;
+    }
+    ul.checks label { cursor: pointer; flex: 1; }
+    ul.checks li.done label { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--muted); }
+    .nav-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 0.75rem;
+      margin-top: 1.25rem;
+    }
+    .nav-row button {
+      padding: 0.55rem 1rem;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      cursor: pointer;
+      font-size: 0.9rem;
+    }
+    .nav-row button.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+    .nav-row button:disabled { opacity: 0.4; cursor: not-allowed; }
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+      align-items: center;
+    }
+    .toolbar button {
+      font-size: 0.8rem;
+      padding: 0.35rem 0.65rem;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+    }
+    .toolbar button:hover { color: var(--text); border-color: var(--muted); }
+    .progress {
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-left: auto;
+    }
+    .progress strong { color: var(--ok); }
+    textarea.notes {
+      width: 100%;
+      min-height: 72px;
+      margin-top: 0.75rem;
+      padding: 0.6rem 0.75rem;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 0.875rem;
+      resize: vertical;
+    }
+    .notes-label { font-size: 0.8rem; color: var(--muted); margin-top: 0.5rem; display: block; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>ImportView — interactive checklist</h1>
+    <p>Open this file in a browser. Progress is saved in localStorage for this origin.</p>
+  </header>
+  <div class="wrap">
+    <div class="toolbar">
+      <button type="button" id="btn-reset">Reset all checkboxes</button>
+      <button type="button" id="btn-export">Copy summary (markdown)</button>
+      <span class="progress" id="progress"></span>
+    </div>
+
+    <div class="steps" id="steps" role="tablist" aria-label="Steps"></div>
+
+    <!-- Step 0 -->
+    <section class="panel visible" data-step="0" aria-labelledby="t0">
+      <h2 id="t0">1. Product / UX</h2>
+      <p class="hint">Decide what happens after POST /o2m succeeds and how much the user fills before create.</p>
+      <ul class="checks" data-panel="0">
+        <li data-id="ux-after-create"><label><input type="checkbox" /> After create: stay on import / switch to edit same app / hand off to host (redirect).</label></li>
+        <li data-id="ux-props-before-create"><label><input type="checkbox" /> Clarify: properties only after doc exists, or include <code>sourceProperties</code> on create.</label></li>
+        <li data-id="ux-load-other-doc"><label><input type="checkbox" /> Scope “load all from other document” (v1 vs later).</label></li>
+      </ul>
+      <label class="notes-label" for="notes-0">Notes</label>
+      <textarea class="notes" id="notes-0" data-notes="0" placeholder="Decisions, links, ticket IDs…"></textarea>
+    </section>
+
+    <!-- Step 1 -->
+    <section class="panel" data-step="1" aria-labelledby="t1">
+      <h2 id="t1">2. Context &amp; loader</h2>
+      <p class="hint"><code>__formInitContext</code> and which <code>loading.js</code> runs.</p>
+      <ul class="checks" data-panel="1">
+        <li data-id="ctx-mode-import"><label><input type="checkbox" /> Add <code>mode: 'import'</code> (or import-only loader file).</label></li>
+        <li data-id="ctx-base-repo"><label><input type="checkbox" /> Pass <code>base</code>, <code>repoId</code>, <code>onPremise</code>, <code>apiKey</code> like edit.</label></li>
+        <li data-id="ctx-no-docid"><label><input type="checkbox" /> No <code>docId</code> at start; optional <code>categoryId</code> preset from host.</label></li>
+        <li data-id="loader-second-file"><label><input type="checkbox" /> Second loader script OR single loader with flag (avoid duplicating bundle URL logic).</label></li>
+      </ul>
+      <label class="notes-label" for="notes-1">Notes</label>
+      <textarea class="notes" id="notes-1" data-notes="1"></textarea>
+    </section>
+
+    <!-- Step 2 -->
+    <section class="panel" data-step="2" aria-labelledby="t2">
+      <h2 id="t2">3. App shell</h2>
+      <p class="hint">Branch at the root so import never requires <code>docId</code>.</p>
+      <ul class="checks" data-panel="2">
+        <li data-id="app-branch"><label><input type="checkbox" /> <code>App.vue</code>: render <code>ImportView</code> vs <code>EditView</code> from context (or route).</label></li>
+        <li data-id="app-inject"><label><input type="checkbox" /> Reuse same <code>provide</code> / <code>formInitContext</code> inject pattern.</label></li>
+      </ul>
+      <label class="notes-label" for="notes-2">Notes</label>
+      <textarea class="notes" id="notes-2" data-notes="2"></textarea>
+    </section>
+
+    <!-- Step 3 -->
+    <section class="panel" data-step="3" aria-labelledby="t3">
+      <h2 id="t3">4. API / services (from alpma pattern)</h2>
+      <p class="hint">Chunk upload + create; align auth with edit (<code>fetch</code> + cookies vs API key).</p>
+      <ul class="checks" data-panel="3">
+        <li data-id="api-chunk"><label><input type="checkbox" /> <code>uploadFileInChunks</code> → POST <code>…/blob/chunk/</code> + continuation URLs.</label></li>
+        <li data-id="api-o2m-post"><label><input type="checkbox" /> <code>createDocumentO2M</code> → POST <code>…/o2m</code> JSON body.</label></li>
+        <li data-id="api-payload"><label><input type="checkbox" /> <code>buildO2mCreatePayload</code> (filename, sourceCategory, sourceId, contentLocationUri, optional sourceProperties).</label></li>
+        <li data-id="api-catprops"><label><input type="checkbox" /> Reuse <code>catProps</code> + <code>idMap</code> / <code>toMetaIndex</code> for selected category.</label></li>
+        <li data-id="api-auth"><label><input type="checkbox" /> Verify cookie / API key behavior matches these endpoints in your environment.</label></li>
+      </ul>
+      <label class="notes-label" for="notes-3">Notes</label>
+      <textarea class="notes" id="notes-3" data-notes="3"></textarea>
+    </section>
+
+    <!-- Step 4 -->
+    <section class="panel" data-step="4" aria-labelledby="t4">
+      <h2 id="t4">5. ImportView.vue</h2>
+      <p class="hint">Orchestration UI; reuse <code>CategoryFormView</code> if you send properties on create.</p>
+      <ul class="checks" data-panel="4">
+        <li data-id="iv-categories"><label><input type="checkbox" /> Category selector (e.g. DOCUMENT_TYPE list from API).</label></li>
+        <li data-id="iv-cat-change"><label><input type="checkbox" /> On category change: load cat props, build idMap / metaIdx.</label></li>
+        <li data-id="iv-file"><label><input type="checkbox" /> File input / dropzone → Blob for chunk upload.</label></li>
+        <li data-id="iv-form-optional"><label><input type="checkbox" /> Optional: bind <code>CategoryFormView</code> to formData for <code>sourceProperties</code>.</label></li>
+        <li data-id="iv-submit"><label><input type="checkbox" /> Import button: upload → build payload → POST o2m → read new id.</label></li>
+        <li data-id="iv-errors"><label><input type="checkbox" /> Progress + error messages (chunk failures, 400 restart, create failure).</label></li>
+      </ul>
+      <label class="notes-label" for="notes-4">Notes</label>
+      <textarea class="notes" id="notes-4" data-notes="4"></textarea>
+    </section>
+
+    <!-- Step 5 -->
+    <section class="panel" data-step="5" aria-labelledby="t5">
+      <h2 id="t5">6. i18n, tests, docs</h2>
+      <p class="hint">Polish and regression safety.</p>
+      <ul class="checks" data-panel="5">
+        <li data-id="i18n"><label><input type="checkbox" /> Add import/upload/create strings to <code>i18n.js</code>.</label></li>
+        <li data-id="test-payload"><label><input type="checkbox" /> Unit tests for create payload (multi/single value, limits).</label></li>
+        <li data-id="test-fetch"><label><input type="checkbox" /> Optional: mock fetch for one happy-path chunk + o2m.</label></li>
+        <li data-id="doc-readme"><label><input type="checkbox" /> Document import loader + context in <code>scripts/README.md</code>.</label></li>
+      </ul>
+      <label class="notes-label" for="notes-5">Notes</label>
+      <textarea class="notes" id="notes-5" data-notes="5"></textarea>
+    </section>
+
+    <div class="nav-row">
+      <button type="button" id="btn-prev">← Previous</button>
+      <button type="button" id="btn-next" class="primary">Next →</button>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      var STORAGE = 'importViewPlanner:v1';
+      var STEP_COUNT = 6;
+      var stepTitles = [
+        '1. Product / UX',
+        '2. Context & loader',
+        '3. App shell',
+        '4. API / services',
+        '5. ImportView.vue',
+        '6. i18n & tests'
+      ];
+
+      function loadState() {
+        try {
+          var raw = localStorage.getItem(STORAGE);
+          if (raw) return JSON.parse(raw);
+        } catch (e) {}
+        return { checks: {}, notes: {}, step: 0 };
+      }
+
+      function saveState(state) {
+        try {
+          localStorage.setItem(STORAGE, JSON.stringify(state));
+        } catch (e) {}
+      }
+
+      var state = loadState();
+      var currentStep = Math.min(Math.max(0, state.step || 0), STEP_COUNT - 1);
+
+      var stepsEl = document.getElementById('steps');
+      var progressEl = document.getElementById('progress');
+      var btnPrev = document.getElementById('btn-prev');
+      var btnNext = document.getElementById('btn-next');
+
+      function allCheckIds() {
+        var ids = [];
+        document.querySelectorAll('ul.checks li[data-id]').forEach(function (li) {
+          ids.push(li.getAttribute('data-id'));
+        });
+        return ids;
+      }
+
+      function updateProgress() {
+        var ids = allCheckIds();
+        var done = ids.filter(function (id) { return state.checks[id]; }).length;
+        progressEl.innerHTML = 'Done: <strong>' + done + '</strong> / ' + ids.length;
+      }
+
+      function renderStepTabs() {
+        stepsEl.innerHTML = '';
+        for (var i = 0; i < STEP_COUNT; i++) {
+          var b = document.createElement('button');
+          b.type = 'button';
+          b.textContent = stepTitles[i];
+          b.setAttribute('role', 'tab');
+          b.setAttribute('aria-selected', i === currentStep ? 'true' : 'false');
+          if (i === currentStep) b.classList.add('active');
+          b.dataset.step = String(i);
+          b.addEventListener('click', function () {
+            var s = parseInt(this.dataset.step, 10);
+            goToStep(s);
+          });
+          stepsEl.appendChild(b);
+        }
+      }
+
+      function goToStep(s) {
+        currentStep = Math.max(0, Math.min(STEP_COUNT - 1, s));
+        state.step = currentStep;
+        document.querySelectorAll('.panel[data-step]').forEach(function (p) {
+          var n = parseInt(p.getAttribute('data-step'), 10);
+          p.classList.toggle('visible', n === currentStep);
+        });
+        renderStepTabs();
+        btnPrev.disabled = currentStep === 0;
+        btnNext.textContent = currentStep === STEP_COUNT - 1 ? 'Done ✓' : 'Next →';
+        saveState(state);
+      }
+
+      function hydrateChecks() {
+        document.querySelectorAll('ul.checks input[type="checkbox"]').forEach(function (input) {
+          var li = input.closest('li');
+          var id = li && li.getAttribute('data-id');
+          if (!id) return;
+          input.checked = !!state.checks[id];
+          li.classList.toggle('done', !!state.checks[id]);
+          input.addEventListener('change', function () {
+            state.checks[id] = input.checked;
+            li.classList.toggle('done', input.checked);
+            saveState(state);
+            updateProgress();
+          });
+        });
+      }
+
+      function hydrateNotes() {
+        document.querySelectorAll('textarea.notes[data-notes]').forEach(function (ta) {
+          var key = ta.getAttribute('data-notes');
+          ta.value = state.notes[key] || '';
+          ta.addEventListener('input', function () {
+            state.notes[key] = ta.value;
+            saveState(state);
+          });
+        });
+      }
+
+      document.getElementById('btn-reset').addEventListener('click', function () {
+        if (!confirm('Clear all checkboxes and notes for this planner?')) return;
+        state = { checks: {}, notes: {}, step: currentStep };
+        document.querySelectorAll('ul.checks input').forEach(function (input) {
+          input.checked = false;
+          var li = input.closest('li');
+          if (li) li.classList.remove('done');
+        });
+        document.querySelectorAll('textarea.notes').forEach(function (ta) { ta.value = ''; });
+        saveState(state);
+        updateProgress();
+      });
+
+      document.getElementById('btn-export').addEventListener('click', function () {
+        var lines = ['# ImportView checklist summary', ''];
+        for (var i = 0; i < STEP_COUNT; i++) {
+          lines.push('## ' + stepTitles[i]);
+          var panel = document.querySelector('ul.checks[data-panel="' + i + '"]');
+          if (panel) {
+            panel.querySelectorAll('li[data-id]').forEach(function (li) {
+              var id = li.getAttribute('data-id');
+              var mark = state.checks[id] ? '[x]' : '[ ]';
+              var text = li.querySelector('label') ? li.querySelector('label').innerText.trim() : '';
+              lines.push('- ' + mark + ' ' + text);
+            });
+          }
+          var note = state.notes[String(i)];
+          if (note && note.trim()) {
+            lines.push('');
+            lines.push('_Notes:_ ' + note.trim().replace(/\n/g, ' '));
+          }
+          lines.push('');
+        }
+        var md = lines.join('\n');
+        navigator.clipboard.writeText(md).then(function () {
+          alert('Summary copied to clipboard as Markdown.');
+        }).catch(function () {
+          prompt('Copy this:', md);
+        });
+      });
+
+      btnPrev.addEventListener('click', function () { goToStep(currentStep - 1); });
+      btnNext.addEventListener('click', function () {
+        if (currentStep < STEP_COUNT - 1) goToStep(currentStep + 1);
+        else alert('All steps visited. Use “Copy summary” to export.');
+      });
+
+      hydrateChecks();
+      hydrateNotes();
+      updateProgress();
+      goToStep(currentStep);
+    })();
+  </script>
+</body>
+</html>

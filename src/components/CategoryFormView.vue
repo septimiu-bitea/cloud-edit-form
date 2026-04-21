@@ -1,13 +1,14 @@
 <template>
-  <v-form ref="formRef" @submit.prevent="$emit('submit')">
+  <v-form ref="formRef" class="category-form-animate" @submit.prevent="$emit('submit')">
     <v-row dense>
       <v-col
-        v-for="prop in visibleProperties"
+        v-for="(prop, index) in visibleProperties"
         :key="prop.id"
         cols="12"
         :sm="fieldMeta(prop).isMulti ? 12 : 6"
         :md="fieldMeta(prop).isMulti ? 12 : 4"
-        class="mt-1"
+        class="mt-1 field-col-animate"
+        :style="{ '--stagger': index }"
       >
         <!-- Text / default -->
         <v-text-field
@@ -15,9 +16,11 @@
           :model-value="currentValue(prop.id)"
           :label="fieldLabel(prop)"
           :readonly="fieldMeta(prop).readOnly"
-          :disabled="fieldMeta(prop).readOnly"
-          :error="isFieldInvalid(prop.id)"
-          :error-messages="isFieldInvalid(prop.id) ? (t(currentLocale, 'fieldRequired') || 'This field is required') : ''"
+          :disabled="fieldMeta(prop).readOnly || locked"
+          :error="fieldHasRequiredError(prop)"
+          :error-messages="fieldHasRequiredError(prop) ? (t(currentLocale, 'fieldRequired') || 'This field is required') : ''"
+          :hint="fieldHint(prop)"
+          :persistent-hint="!!fieldHint(prop)"
           variant="outlined"
           density="comfortable"
           hide-details="auto"
@@ -31,9 +34,11 @@
           :label="fieldLabel(prop)"
           type="number"
           :readonly="fieldMeta(prop).readOnly"
-          :disabled="fieldMeta(prop).readOnly"
-          :error="isFieldInvalid(prop.id)"
-          :error-messages="isFieldInvalid(prop.id) ? (t(currentLocale, 'fieldRequired') || 'This field is required') : ''"
+          :disabled="fieldMeta(prop).readOnly || locked"
+          :error="fieldHasRequiredError(prop)"
+          :error-messages="fieldHasRequiredError(prop) ? (t(currentLocale, 'fieldRequired') || 'This field is required') : ''"
+          :hint="fieldHint(prop)"
+          :persistent-hint="!!fieldHint(prop)"
           variant="outlined"
           density="comfortable"
           hide-details="auto"
@@ -47,9 +52,11 @@
           :label="fieldLabel(prop)"
           type="date"
           :readonly="fieldMeta(prop).readOnly"
-          :disabled="fieldMeta(prop).readOnly"
-          :error="isFieldInvalid(prop.id)"
-          :error-messages="isFieldInvalid(prop.id) ? (t(currentLocale, 'fieldRequired') || 'This field is required') : ''"
+          :disabled="fieldMeta(prop).readOnly || locked"
+          :error="fieldHasRequiredError(prop)"
+          :error-messages="fieldHasRequiredError(prop) ? (t(currentLocale, 'fieldRequired') || 'This field is required') : ''"
+          :hint="fieldHint(prop)"
+          :persistent-hint="!!fieldHint(prop)"
           variant="outlined"
           density="comfortable"
           hide-details="auto"
@@ -62,9 +69,11 @@
           :model-value="currentValue(prop.id)"
           :label="fieldLabel(prop)"
           :readonly="fieldMeta(prop).readOnly"
-          :disabled="fieldMeta(prop).readOnly"
-          :error="isFieldInvalid(prop.id)"
-          :error-messages="isFieldInvalid(prop.id) ? (t(currentLocale, 'fieldRequired') || 'This field is required') : ''"
+          :disabled="fieldMeta(prop).readOnly || locked"
+          :error="fieldHasRequiredError(prop)"
+          :error-messages="fieldHasRequiredError(prop) ? (t(currentLocale, 'fieldRequired') || 'This field is required') : ''"
+          :hint="fieldHint(prop)"
+          :persistent-hint="!!fieldHint(prop)"
           variant="outlined"
           density="comfortable"
           hide-details="auto"
@@ -76,10 +85,13 @@
           v-else-if="fieldType(prop) === 'checkbox' && !fieldMeta(prop).isMulti"
           :model-value="currentValue(prop.id)"
           :label="fieldLabel(prop)"
+          :color="fieldHasRequiredError(prop) ? 'error' : 'primary'"
           :readonly="fieldMeta(prop).readOnly"
-          :disabled="fieldMeta(prop).readOnly"
-          :error="isFieldInvalid(prop.id)"
-          :error-messages="isFieldInvalid(prop.id) ? (t(currentLocale, 'fieldRequired') || 'This field is required') : ''"
+          :disabled="fieldMeta(prop).readOnly || locked"
+          :error="fieldHasRequiredError(prop)"
+          :error-messages="fieldHasRequiredError(prop) ? (t(currentLocale, 'fieldRequired') || 'This field is required') : ''"
+          :hint="fieldHint(prop)"
+          :persistent-hint="!!fieldHint(prop)"
           hide-details="auto"
           :data-field-uuid="resolveUuid(prop.id)"
           @update:model-value="emitField(prop.id, !!$event)"
@@ -89,9 +101,10 @@
           v-else-if="fieldType(prop) === 'multitext'"
           :model-value="multiValues(prop.id)"
           :label="fieldMeta(prop).label"
-          :readonly="fieldMeta(prop).readOnly"
+          :readonly="fieldMeta(prop).readOnly || locked"
           :required="fieldMeta(prop).isRequired"
-          :error="isFieldInvalid(prop.id)"
+          :error="fieldHasRequiredError(prop)"
+          :hint="multiFieldHint(prop)"
           :current-locale="currentLocale"
           :delimiter="delimiter"
           :import-from-doc="importFromDocFor(prop.id)"
@@ -142,6 +155,16 @@ export default {
     invalidFields: {
       type: Array,
       default: () => []
+    },
+    /** When true, all fields are non-interactive (e.g. while Pilot runs). */
+    locked: {
+      type: Boolean,
+      default: false
+    },
+    /** Show persistent hints on mandatory fields (import flow). */
+    showRequiredHints: {
+      type: Boolean,
+      default: false
     }
   },
   emits: ['update:modelValue', 'submit', 'field-updated'],
@@ -168,6 +191,37 @@ export default {
         return `${meta.label} *`
       }
       return meta.label
+    },
+    /** Required, editable field is still empty (red border + message). */
+    fieldHasRequiredError (prop) {
+      const m = this.fieldMeta(prop)
+      if (m.readOnly || !m.isRequired) return false
+      return !this.propertyValueSatisfied(prop)
+    },
+    /** Same “has value” rules as ImportView.validateMandatory — hint only while empty. */
+    propertyValueSatisfied (prop) {
+      const m = this.fieldMeta(prop)
+      if (m.readOnly || !m.isRequired) return true
+      const uuid = this.resolveUuid(prop.id)
+      const value = this.modelValue[uuid]
+      if (m.isMulti) {
+        if (Array.isArray(value)) {
+          const vals = value.map(v => (v != null && typeof v === 'object' && 'value' in v) ? v.value : v)
+          return vals.length > 0 && vals.some(v => v != null && String(v).trim() !== '')
+        }
+        return value != null && value !== ''
+      }
+      if (value != null && value !== '') {
+        return String(value).trim().length > 0 || typeof value === 'boolean'
+      }
+      return false
+    },
+    /** Import flow once used importRequiredHint; empty required is shown via :error + fieldRequired. */
+    fieldHint () {
+      return undefined
+    },
+    multiFieldHint (prop) {
+      return this.fieldHint(prop) || ''
     },
     isFieldInvalid (propId) {
       const uuid = this.resolveUuid(propId)

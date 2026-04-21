@@ -1,58 +1,65 @@
 // ============================================================================
-// Vue loader — EDIT mode (existing document). Use loading.import.js on import-only pages.
+// Vue loader — IMPORT mode (new document / upload flow). Use loading.js on edit pages.
+// Host: load this script only on the import form page so mode is always correct.
 // ============================================================================
-if (typeof console !== 'undefined') console.log('[vue-loader] loading.js (edit mode) loaded');
+if (typeof console !== 'undefined') console.log('[vue-loader-import] loading.import.js loaded');
 
 // --- Config (edit these) ---
 /** Vue app script URL (single-file bundle). */
 var BUNDLE_URL = 'https://septimiu-bitea.github.io/cloud-edit-form/assets/vue-app.js?v=' + (window.__APP_VERSION || Date.now());
-/** CSS selector for the element the Vue app mounts into. Use #main-container to replace the default form area. */
+/** CSS selector for the element the Vue app mounts into. */
 var BUNDLE_MOUNT_SELECTOR = '#main-container';
 /** Set true when running on d.velop on-premise (affects API behavior in the Vue app). */
 var ON_PREMISE = true;
 /** Fixed repository ID (UUID), or null to resolve from URL. */
 var REPO_ID = null;
-/** Enable debug logging in the Vue app (console.log, console.warn, etc.). */
+/** Enable debug logging in the Vue app. */
 var DEBUG = false;
-/** When true, required fields can be bypassed on save (still marked invalid in UI; validation/save API is still called). */
+/** Import flow: bypass required fields is usually irrelevant until ImportView defines save; kept for parity with edit loader. */
 var ALLOW_BYPASS_REQUIRED_FIELDS = false;
 /** Auto-trigger: set to true to automatically call formInit when Form.io is detected. */
 var AUTO_TRIGGER = true;
 // --- End config ---
 
-var vueLoaderFormInit = function (form, data) {
-  if (typeof console !== 'undefined') console.log('[vue-loader] formInit called', { hasForm: !!form, data: data });
+var vueLoaderFormInitImport = function (form, data) {
+  if (typeof console !== 'undefined') console.log('[vue-loader-import] formInit called', { hasForm: !!form, data: data });
 
   if (!BUNDLE_URL || !BUNDLE_URL.startsWith('http')) {
-    if (typeof console !== 'undefined') console.warn('[vue-loader] BUNDLE_URL missing or invalid:', BUNDLE_URL);
+    if (typeof console !== 'undefined') console.warn('[vue-loader-import] BUNDLE_URL missing or invalid:', BUNDLE_URL);
     return;
   }
 
-  // Prevent multiple calls
   if (window.__formInitContext) {
-    if (typeof console !== 'undefined') console.log('[vue-loader] formInit already called, skipping');
+    if (typeof console !== 'undefined') console.log('[vue-loader-import] formInit already called, skipping');
     return;
   }
 
   var base = window.location.origin;
   var uiLocale = (window.DV_LANG || navigator.language || 'en').trim();
   var dataObj = Object.assign({}, data || {});
+
+  // Optional docId (e.g. after redirect); import usually starts without one
   var docId = dataObj.docId || (form && form.submission && form.submission.data && form.submission.data.docId);
   if (docId == null && typeof window.resolveDocIdFromProcess === 'function') {
     docId = window.resolveDocIdFromProcess({ log: false });
   }
   if (docId != null) dataObj.docId = docId;
-  
-  // Extract dmsProperties from common locations (similar to docId extraction)
-  var dmsProperties = dataObj.dmsProperties || 
-                      dataObj.data?.dmsProperties ||
-                      (form && form.submission && form.submission.data && form.submission.data.dmsProperties) ||
-                      (form && form.data && form.data.dmsProperties) ||
-                      (typeof window !== 'undefined' && window.DMS_PROPERTIES) ||
-                      null;
+
+  // Preset category from host: data.categoryId or submission
+  var categoryId = dataObj.categoryId ||
+    (form && form.submission && form.submission.data && form.submission.data.importCategoryId) ||
+    (form && form.submission && form.submission.data && form.submission.data.categoryId);
+  if (categoryId != null && dataObj.categoryId == null) dataObj.categoryId = categoryId;
+
+  var dmsProperties = dataObj.dmsProperties ||
+    dataObj.data?.dmsProperties ||
+    (form && form.submission && form.submission.data && form.submission.data.dmsProperties) ||
+    (form && form.data && form.data.dmsProperties) ||
+    (typeof window !== 'undefined' && window.DMS_PROPERTIES) ||
+    null;
   if (dmsProperties != null) {
     dataObj.dmsProperties = dmsProperties;
-    if (typeof console !== 'undefined') console.log('[vue-loader] Found dmsProperties:', Object.keys(dmsProperties).length, 'properties');
+    if (typeof console !== 'undefined') console.log('[vue-loader-import] Found dmsProperties:', Object.keys(dmsProperties).length, 'properties');
   }
 
   var mountEl = null;
@@ -69,7 +76,7 @@ var vueLoaderFormInit = function (form, data) {
   }
 
   window.__formInitContext = {
-    mode: 'edit',
+    mode: 'import',
     form: form,
     base: base,
     uiLocale: uiLocale,
@@ -80,75 +87,67 @@ var vueLoaderFormInit = function (form, data) {
     debug: !!DEBUG,
     allowBypassRequiredFields: !!ALLOW_BYPASS_REQUIRED_FIELDS
   };
-  if (typeof console !== 'undefined') console.log('[vue-loader] context set, loading script:', BUNDLE_URL);
+  if (typeof console !== 'undefined') console.log('[vue-loader-import] context set (mode=import), loading script:', BUNDLE_URL);
 
   var script = document.createElement('script');
   script.src = BUNDLE_URL;
   script.async = false;
   script.onload = function () {
-    if (typeof console !== 'undefined') console.log('[vue-loader] script loaded');
+    if (typeof console !== 'undefined') console.log('[vue-loader-import] script loaded');
   };
   script.onerror = function () {
-    if (typeof console !== 'undefined') console.error('[vue-loader] script failed to load (404, CORS, or network):', BUNDLE_URL);
+    if (typeof console !== 'undefined') console.error('[vue-loader-import] script failed to load (404, CORS, or network):', BUNDLE_URL);
   };
   document.head.appendChild(script);
 };
 
-window.formInit = vueLoaderFormInit;
+window.formInit = vueLoaderFormInitImport;
 
-// Expose manual trigger for testing/debugging
 window.__vueLoaderTrigger = function (form, data) {
-  if (typeof console !== 'undefined') console.log('[vue-loader] Manual trigger called');
-  vueLoaderFormInit(form, data);
+  if (typeof console !== 'undefined') console.log('[vue-loader-import] Manual trigger called');
+  vueLoaderFormInitImport(form, data);
 };
 
 if (typeof console !== 'undefined') {
   setTimeout(function () {
-    if (window.formInit !== vueLoaderFormInit) {
-      console.warn('[vue-loader] window.formInit was overwritten after loading.js. Load loading.js after the main app so our formInit is used.');
+    if (window.formInit !== vueLoaderFormInitImport) {
+      console.warn('[vue-loader-import] window.formInit was overwritten after loading.import.js. Load this file after the main app so our formInit is used.');
     } else {
-      console.log('[vue-loader] formInit is ready. Call window.formInit(form, data) or window.__vueLoaderTrigger(form, data) to load the Vue app.');
+      console.log('[vue-loader-import] formInit is ready. Call window.formInit(form, data) or window.__vueLoaderTrigger(form, data).');
     }
   }, 100);
-  
-  // Auto-trigger: try multiple detection strategies
+
   if (AUTO_TRIGGER) {
     var triggered = false;
     var checkFormReady = function () {
       if (triggered || window.__formInitContext) return;
-      
-      // Strategy 1: Check for Form.io form instance in common locations
+
       var formioForm = null;
       if (typeof window.Formio !== 'undefined') {
-        // Look for Form.io instances
         var formioElements = document.querySelectorAll('[class*="formio"], [id*="formio"], [data-testid*="component"]');
         if (formioElements.length > 0) {
           formioForm = formioElements[0].__formio || formioElements[0].formio;
         }
       }
-      
-      // Strategy 2: Check for form container elements
-      var formContainer = document.querySelector('#main-container') || 
-                          document.querySelector('#dvf-form-viewer') ||
-                          document.querySelector('.formio-component-form') ||
-                          document.querySelector('[data-testid*="component"]');
-      
-      // Strategy 3: Check if form has been rendered (has formio-form class)
+
+      var formContainer = document.querySelector('#main-container') ||
+        document.querySelector('#dvf-form-viewer') ||
+        document.querySelector('.formio-component-form') ||
+        document.querySelector('[data-testid*="component"]');
+
       var formRendered = document.querySelector('.formio-form');
-      
+
       if (formContainer && (formRendered || formioForm)) {
         triggered = true;
-        if (typeof console !== 'undefined') console.log('[vue-loader] Auto-detected Form.io ready, calling formInit...');
-        vueLoaderFormInit(formioForm || null, {});
+        if (typeof console !== 'undefined') console.log('[vue-loader-import] Auto-detected Form.io ready, calling formInit...');
+        vueLoaderFormInitImport(formioForm || null, {});
         return true;
       }
-      
+
       return false;
     };
-    
-    // Try immediately
+
     if (!checkFormReady()) {
-      // Poll every 200ms for up to 10 seconds
       var attempts = 0;
       var maxAttempts = 50;
       var pollInterval = setInterval(function () {
@@ -156,14 +155,13 @@ if (typeof console !== 'undefined') {
         if (checkFormReady() || attempts >= maxAttempts) {
           clearInterval(pollInterval);
           if (attempts >= maxAttempts && !triggered) {
-            if (typeof console !== 'undefined') console.log('[vue-loader] Auto-trigger timeout. Form.io may not be ready yet. Call window.formInit(form, data) manually when ready.');
+            if (typeof console !== 'undefined') console.log('[vue-loader-import] Auto-trigger timeout. Call window.formInit(form, data) manually when ready.');
           }
         }
       }, 200);
-      
-      // Also listen for DOM mutations (form might be added dynamically)
+
       if (typeof MutationObserver !== 'undefined') {
-        var observer = new MutationObserver(function (mutations) {
+        var observer = new MutationObserver(function () {
           if (!triggered && checkFormReady()) {
             observer.disconnect();
           }
@@ -174,8 +172,6 @@ if (typeof console !== 'undefined') {
           attributes: true,
           attributeFilter: ['class', 'id', 'data-testid']
         });
-        
-        // Disconnect after 10 seconds
         setTimeout(function () {
           observer.disconnect();
         }, 10000);

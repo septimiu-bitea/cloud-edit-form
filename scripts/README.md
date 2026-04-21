@@ -7,9 +7,22 @@ This folder contains a **minimal** script that only:
 
 No Form.io, no validation, no iframe. Use this when the host should only load the Vue app and pass context.
 
-## File
+## Files
 
-- **loading.js** – Standard loader (use this always). Config at the top (BUNDLE_URL, BUNDLE_MOUNT_SELECTOR, ON_PREMISE, REPO_ID, ALLOW_BYPASS_REQUIRED_FIELDS) and `window.formInit`. Load this one script after the main app.
+- **loading.js** – **Edit** flow: existing document. Sets `window.__formInitContext.mode === 'edit'`. Load on **edit** tenant / form pages only.
+- **loading.import.js** – **Import** flow: new document (upload + create). Sets `window.__formInitContext.mode === 'import'`. Load on **import** tenant / form pages only.
+
+Use **two different host scripts** so the platform never has to infer mode: each page includes exactly one loader. Both share the same config block (BUNDLE_URL, BUNDLE_MOUNT_SELECTOR, ON_PREMISE, REPO_ID, etc.); keep those in sync if you change URLs.
+
+The Vue app reads `formInitContext.mode` to render **EditView** vs **ImportView**.
+
+### Local dev (Vite)
+
+In **`vue-app/.env.local`** set **`VITE_FORM_MODE=import`**, **`VITE_BASE_URL`** (tenant URL for the proxy), **`VITE_REPO_ID`**, omit **`VITE_DOCUMENT_ID`**, optionally **`VITE_IMPORT_CATEGORY_ID`** and **`VITE_API_KEY`**. Run **`npm run dev`** from `vue-app/`.
+
+Optional **`VITE_AFTER_IMPORT_URL`**: URL template after a successful create. Placeholders **`{docId}`** and **`{repoId}`** are replaced with raw ids. If unset, the app navigates to **`{base}/dms/r/{repoId}/o2/{docId}`**. The host can also set **`data.afterImportUrlTemplate`** on `__formInitContext`.
+
+Helpers: **`npm run test:documentImport`** (chunk/create payload unit smoke test).
 
 ## Setup
 
@@ -25,13 +38,15 @@ No Form.io, no validation, no iframe. Use this when the host should only load th
    ```
    If the selector matches an existing element (e.g. `#main-container`), the loader clears it and mounts the Vue app there. Otherwise it creates a div with that id.
 
-3. Load **loading.js** on the host page **after** the main app. The host page should have the mount element (e.g. `#main-container`) or the loader will create one.
+3. Load **loading.js** (edit) or **loading.import.js** (import) on the host page **after** the main app—**never both** on the same page. The page should have the mount element (e.g. `#main-container`) or the loader will create one.
 
 4. **On-premise / repo:** Set `ON_PREMISE = true` and optionally `REPO_ID` to a repository UUID. Both are passed to the Vue app in `__formInitContext`.
 
 ## Contract
 
 - The host calls `formInit(form, data)`. The loader sets `window.__formInitContext` and then loads the script at BUNDLE_URL.
+- **Context** includes **`mode`**: `'edit'` or `'import'` (which loader ran).
+- **Import loader** also copies optional **`data.categoryId`** from `data` or Form.io `submission.data.importCategoryId` / `categoryId` when present.
 - The Vue app script runs in the same window and reads `window.__formInitContext`.
 
 ## Troubleshooting (nothing happens on tenant)

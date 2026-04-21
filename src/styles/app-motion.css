@@ -1,0 +1,275 @@
+/* Shared motion + surface polish for embed forms */
+
+/* Cross-fade when switching Edit vs Import (mode="out-in") */
+.view-cross-fade-enter-active,
+.view-cross-fade-leave-active {
+  transition:
+    opacity 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.view-cross-fade-enter-from {
+  opacity: 0;
+  transform: translateY(12px) scale(0.992);
+}
+.view-cross-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-8px) scale(0.992);
+}
+
+/* Main form shell appears after load */
+.form-shell-enter-active {
+  transition:
+    opacity 0.38s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.38s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.form-shell-enter-from {
+  opacity: 0;
+  transform: translateY(16px);
+}
+
+/* Loading / error states */
+.state-fade-enter-active,
+.state-fade-leave-active {
+  transition: opacity 0.22s ease;
+}
+.state-fade-enter-from,
+.state-fade-leave-to {
+  opacity: 0;
+}
+
+/* Inline progress under header */
+.progress-slide-enter-active,
+.progress-slide-leave-active {
+  transition:
+    opacity 0.25s ease,
+    transform 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.progress-slide-enter-from,
+.progress-slide-leave-to {
+  opacity: 0;
+  transform: scaleY(0.6);
+  transform-origin: top center;
+}
+
+/* Category fields: light stagger (CategoryFormView sets --stagger on each col) */
+@keyframes category-field-rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.category-form-animate .field-col-animate {
+  animation: category-field-rise 0.42s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  animation-delay: calc(min(var(--stagger, 0), 24) * 35ms);
+}
+
+/* Card elevation softens on hover (embedded panels) */
+.surface-card {
+  transition:
+    box-shadow 0.35s cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 0.25s ease,
+    transform 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.surface-card:hover {
+  box-shadow:
+    0 6px 24px rgba(0, 0, 0, 0.07),
+    0 2px 8px rgba(0, 0, 0, 0.04) !important;
+  transform: translateY(-1px);
+}
+
+/* Pilot / AI suggest: “quantum” hover — rotating spectrum ring + soft glow */
+@keyframes quantum-orbit {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+@keyframes quantum-glow {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 1px rgba(99, 102, 241, 0.28),
+      0 0 16px rgba(34, 211, 238, 0.2),
+      0 0 28px rgba(168, 85, 247, 0.14);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1px rgba(168, 85, 247, 0.32),
+      0 0 22px rgba(99, 102, 241, 0.26),
+      0 0 38px rgba(34, 211, 238, 0.18);
+  }
+}
+
+@keyframes quantum-sparkle {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.85;
+    transform: scale(1.12);
+  }
+}
+
+.quantum-pilot-wrap.v-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  /* Match Vuetify x-large icon btn; equal box so ring + glow stay centered */
+  width: 56px !important;
+  height: 56px !important;
+  min-width: 56px !important;
+  min-height: 56px !important;
+  max-width: 56px;
+  max-height: 56px;
+  padding: 0 !important;
+  border-radius: 50% !important;
+  isolation: isolate;
+  overflow: visible !important;
+}
+
+.quantum-pilot-wrap.v-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 2px;
+  transform-origin: center center;
+  box-sizing: border-box;
+  background: conic-gradient(
+    from 0deg,
+    hsl(250 95% 68%),
+    hsl(190 95% 58%),
+    hsl(300 90% 65%),
+    hsl(220 95% 62%),
+    hsl(250 95% 68%)
+  );
+  opacity: 0;
+  transition: opacity 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+  pointer-events: none;
+  z-index: 0;
+  animation: quantum-orbit 2.6s linear infinite paused;
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
+
+.quantum-pilot-wrap.v-btn::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  transform-origin: center center;
+  background: radial-gradient(circle at 50% 50%, rgba(34, 211, 238, 0.16), transparent 42%),
+    radial-gradient(circle at 50% 50%, rgba(168, 85, 247, 0.12), transparent 55%);
+  opacity: 0;
+  transition: opacity 0.35s ease;
+  pointer-events: none;
+  z-index: 0;
+  mix-blend-mode: screen;
+  box-sizing: border-box;
+}
+
+.quantum-pilot-wrap.v-btn:not(.v-btn--disabled):hover::after {
+  opacity: 1;
+  /* Glow on ::after (not the v-btn) so pulsation is centered on the circle; sparkle + glow compose */
+  animation:
+    quantum-sparkle 2.2s ease-in-out infinite,
+    quantum-glow 2.4s ease-in-out infinite;
+}
+
+.quantum-pilot-wrap.v-btn:not(.v-btn--disabled):hover::before {
+  opacity: 1;
+  animation-play-state: running;
+}
+
+.quantum-pilot-wrap.v-btn .v-btn__content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+}
+
+.quantum-pilot-wrap.v-btn--disabled::before,
+.quantum-pilot-wrap.v-btn--disabled::after {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .quantum-pilot-wrap.v-btn::before,
+  .quantum-pilot-wrap.v-btn::after,
+  .quantum-pilot-wrap.v-btn {
+    animation: none !important;
+  }
+  .quantum-pilot-wrap.v-btn:not(.v-btn--disabled):hover::before {
+    opacity: 0.55;
+    animation: none;
+  }
+}
+
+/* Full-area Pilot blocking overlay (Import view) */
+.quantum-pilot-overlay-panel {
+  position: relative;
+  padding: 1.25rem 1.75rem;
+  border-radius: 16px;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.quantum-pilot-overlay-panel::before {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: inherit;
+  background: conic-gradient(
+    from 0deg,
+    hsl(250 95% 68% / 0.55),
+    hsl(190 95% 58% / 0.5),
+    hsl(300 90% 65% / 0.55),
+    hsl(220 95% 62% / 0.5),
+    hsl(250 95% 68% / 0.55)
+  );
+  animation: quantum-orbit 3.2s linear infinite;
+  opacity: 0.85;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.quantum-pilot-overlay-panel::after {
+  content: '';
+  position: absolute;
+  inset: 2px;
+  border-radius: 14px;
+  background: rgb(var(--v-theme-surface));
+  z-index: 0;
+  pointer-events: none;
+}
+
+.quantum-pilot-overlay-panel > * {
+  position: relative;
+  z-index: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .quantum-pilot-overlay-panel::before {
+    animation: none;
+    opacity: 0.4;
+  }
+}

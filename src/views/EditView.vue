@@ -1,60 +1,95 @@
 <template>
-  <v-card class="edit-view-card">
-    <v-card-title class="d-flex align-center flex-shrink-0">
-      <span>{{ t(locale, 'editDocument') }}</span>
+  <v-card class="edit-view-card surface-card" elevation="4">
+    <PoweredByStrip :locale="locale" />
+    <v-card-title class="d-flex align-center flex-shrink-0 edit-view-title">
+      <span class="text-h6 font-weight-semibold">{{ t(locale, 'editDocument') }}</span>
       <v-spacer />
-      <v-btn
-        v-if="loaded"
-        color="primary"
-        :loading="saveLoading"
-        :disabled="saveLoading"
-        @click="onSave"
-      >
-        {{ t(locale, 'save') }}
-      </v-btn>
+      <transition name="state-fade" mode="out-in">
+        <v-btn
+          v-if="loaded"
+          key="save"
+          color="primary"
+          size="large"
+          class="px-6"
+          :loading="saveLoading"
+          :disabled="saveLoading"
+          @click="onSave"
+        >
+          {{ t(locale, 'save') }}
+        </v-btn>
+      </transition>
     </v-card-title>
-    <v-card-subtitle v-if="docId" class="flex-shrink-0">{{ t(locale, 'documentId') }}: {{ docId }}</v-card-subtitle>
+    <v-card-subtitle v-if="docId" class="flex-shrink-0 text-medium-emphasis">
+      {{ t(locale, 'documentId') }}: {{ docId }}
+    </v-card-subtitle>
     <v-card-text class="edit-view-card-text">
-      <v-progress-linear v-if="loading" indeterminate color="primary" class="mb-4" />
-      <v-alert v-else-if="error" type="error" variant="tonal" class="mb-4">
-        {{ error }}
-      </v-alert>
-      <template v-else-if="loaded">
-        <v-tabs v-model="activeTab" color="primary" class="mb-2 flex-shrink-0">
-          <v-tab value="properties">{{ t(locale, 'tabProperties') }}</v-tab>
-          <v-tab value="system">{{ t(locale, 'tabSystem') }}</v-tab>
-        </v-tabs>
-        <v-divider class="mb-3 flex-shrink-0" />
-        <v-tabs-window v-model="activeTab" class="edit-view-tabs-window">
-          <v-tabs-window-item value="properties" class="edit-view-tab-item mt-2">
-            <div class="edit-view-tab-scroll">
-              <v-checkbox
-                v-model="showMultivalueOnly"
-                :label="t(locale, 'showMultivalueOnly')"
-                hide-details
-                density="compact"
-                class="mb-2"
-              />
-              <CategoryFormView
-                v-model="formData"
-                :properties="categoryOnlyPropertiesFiltered"
-                :id-map="idMap"
-                :current-locale="locale"
-                delimiter=";"
-                :fetch-property-values-from-doc="fetchPropertyValuesFromDoc"
-                :invalid-fields="invalidFields"
-                @submit="onSave"
-                @field-updated="onFieldUpdated"
-              />
+      <transition name="state-fade" mode="out-in">
+        <div v-if="loading" key="loading" class="edit-state-block">
+          <v-progress-linear indeterminate color="primary" rounded height="6" class="mb-2" />
+          <p class="text-body-2 text-medium-emphasis text-center mb-0">{{ t(locale, 'editLoadingHint') }}</p>
+        </div>
+        <v-alert
+          v-else-if="error"
+          key="error"
+          type="error"
+          variant="tonal"
+          class="mb-0 rounded-lg"
+          border="start"
+        >
+          {{ error }}
+        </v-alert>
+        <div v-else-if="loaded" key="loaded" class="edit-loaded-root">
+          <transition name="form-shell" appear>
+            <div class="edit-form-shell">
+              <v-tabs
+                v-model="activeTab"
+                color="primary"
+                class="mb-2 flex-shrink-0 edit-tabs"
+                bg-color="transparent"
+                slider-color="primary"
+              >
+                <v-tab value="properties" rounded="lg" class="text-none">
+                  {{ t(locale, 'tabProperties') }}
+                </v-tab>
+                <v-tab value="system" rounded="lg" class="text-none">
+                  {{ t(locale, 'tabSystem') }}
+                </v-tab>
+              </v-tabs>
+              <v-divider class="mb-3 flex-shrink-0 opacity-90" />
+              <v-tabs-window v-model="activeTab" class="edit-view-tabs-window">
+                <v-tabs-window-item value="properties" class="edit-view-tab-item mt-2">
+                  <div class="edit-view-tab-scroll">
+                    <v-checkbox
+                      v-model="showMultivalueOnly"
+                      :label="t(locale, 'showMultivalueOnly')"
+                      hide-details
+                      density="compact"
+                      class="mb-2"
+                      color="primary"
+                    />
+                    <CategoryFormView
+                      v-model="formData"
+                      :properties="categoryOnlyPropertiesFiltered"
+                      :id-map="idMap"
+                      :current-locale="locale"
+                      delimiter=";"
+                      :fetch-property-values-from-doc="fetchPropertyValuesFromDoc"
+                      :invalid-fields="invalidFields"
+                      @submit="onSave"
+                      @field-updated="onFieldUpdated"
+                    />
+                  </div>
+                </v-tabs-window-item>
+                <v-tabs-window-item value="system" class="edit-view-tab-item mt-2">
+                  <div class="edit-view-tab-scroll">
+                    <SystemPropertiesView :system-properties="systemPropertiesList" :current-locale="locale" />
+                  </div>
+                </v-tabs-window-item>
+              </v-tabs-window>
             </div>
-          </v-tabs-window-item>
-          <v-tabs-window-item value="system" class="edit-view-tab-item mt-2">
-            <div class="edit-view-tab-scroll">
-              <SystemPropertiesView :system-properties="systemPropertiesList" :current-locale="locale" />
-            </div>
-          </v-tabs-window-item>
-        </v-tabs-window>
-      </template>
+          </transition>
+        </div>
+      </transition>
     </v-card-text>
 
     <v-snackbar
@@ -70,6 +105,7 @@
 
 <script>
 import CategoryFormView from '@/components/CategoryFormView.vue'
+import PoweredByStrip from '@/components/PoweredByStrip.vue'
 import SystemPropertiesView from '@/components/SystemPropertiesView.vue'
 import { createApi, usedRepoId } from '@/services/api'
 import {
@@ -91,7 +127,7 @@ import { log, error } from '@/utils/debug'
 
 export default {
   name: 'EditView',
-  components: { CategoryFormView, SystemPropertiesView },
+  components: { CategoryFormView, PoweredByStrip, SystemPropertiesView },
   inject: {
     formInitContext: { default: null },
     rawFetchResponses: { default: null }
@@ -718,6 +754,10 @@ export default {
 <style scoped>
 /* Fixed height: card fills container; only tab content (Standard / System properties) scrolls */
 .edit-view-card {
+  width: 100%;
+  min-width: 720px;
+  max-width: 1440px;
+  margin: 0 auto;
   flex: 1;
   min-height: 0;
   display: flex;
@@ -761,5 +801,24 @@ export default {
   /* Fallback so this area scrolls even if flex parent height isn't set (e.g. Vuetify absolute positioning) */
   max-height: calc(100vh - 220px);
   padding-bottom: 1rem;
+  scroll-behavior: smooth;
+}
+.edit-view-title {
+  padding-top: 1.1rem;
+  padding-bottom: 0.5rem;
+}
+.edit-state-block {
+  padding: 0.5rem 0 1rem;
+}
+.edit-tabs :deep(.v-tab) {
+  letter-spacing: 0.01em;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+.edit-tabs :deep(.v-tab--selected) {
+  background: rgba(var(--v-theme-primary), 0.12);
+  font-weight: 600;
+}
+.edit-form-shell {
+  min-height: 0;
 }
 </style>

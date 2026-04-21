@@ -18,12 +18,21 @@ export default defineConfig(({ mode }) => {
     },
   },
   server: baseUrl ? {
+    host: true,
     proxy: {
       '/api': {
         target: baseUrl,
         changeOrigin: true,
         secure: true,
         rewrite: (path) => path.replace(/^\/api/, ''),
+        // d.velop APIs (incl. Pilot /d42) reject Origin/Referer from localhost or LAN IPs.
+        // Make proxied requests look like they originate from the tenant URL.
+        configure: (proxy) => {
+          proxy.on('proxyReq', (proxyReq) => {
+            proxyReq.setHeader('Origin', baseUrl)
+            proxyReq.setHeader('Referer', `${baseUrl}/`)
+          })
+        },
       },
     },
   } : undefined,

@@ -13,4 +13,12 @@ export default createVuetify({
   icons: {
     defaultSet: 'mdi',
   },
+  defaults: {
+    VBtn: {
+      rounded: 'lg',
+    },
+    VCard: {
+      rounded: 'xl',
+    },
+  },
 })
