@@ -149,6 +149,7 @@
           :delimiter="delimiter"
           :import-from-doc="importFromDocFor(prop.id)"
           :data-field-uuid="resolveUuid(prop.id)"
+          :compact="compactMultivalue"
           @update:model-value="handleMultivalueUpdate(prop.id, $event)"
         />
       </v-col>
@@ -212,6 +213,11 @@ export default {
     datasetOptionsByDataSetId: {
       type: Object,
       default: () => ({})
+    },
+    /** Tighter multivalue fields (smaller chips, scroll area); keeps add/paste/clear/import behavior. */
+    compactMultivalue: {
+      type: Boolean,
+      default: false
     }
   },
   emits: ['update:modelValue', 'submit', 'field-updated'],

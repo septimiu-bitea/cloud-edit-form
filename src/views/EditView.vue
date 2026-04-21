@@ -57,14 +57,14 @@
               </v-tabs>
               <v-divider class="mb-3 flex-shrink-0 opacity-90" />
               <v-tabs-window v-model="activeTab" class="edit-view-tabs-window">
-                <v-tabs-window-item value="properties" class="edit-view-tab-item mt-2">
+                <v-tabs-window-item value="properties" class="edit-view-tab-item mt-1">
                   <div class="edit-view-tab-scroll">
                     <v-checkbox
                       v-model="showMultivalueOnly"
                       :label="t(locale, 'showMultivalueOnly')"
                       hide-details
                       density="compact"
-                      class="mb-2"
+                      class="mb-1"
                       color="primary"
                     />
                     <CategoryFormView
@@ -75,6 +75,7 @@
                       delimiter=";"
                       :fetch-property-values-from-doc="fetchPropertyValuesFromDoc"
                       :invalid-fields="invalidFields"
+                      compact-multivalue
                       @submit="onSave"
                       @field-updated="onFieldUpdated"
                     />
@@ -820,5 +821,9 @@ export default {
 }
 .edit-form-shell {
   min-height: 0;
+}
+/* First property row sits closer to the filter checkbox (e.g. Title field) */
+.edit-view-tab-scroll :deep(.category-form-animate .v-row:first-child .field-col-animate) {
+  margin-top: 0 !important;
 }
 </style>

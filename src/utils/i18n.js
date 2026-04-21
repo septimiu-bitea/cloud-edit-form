@@ -93,7 +93,9 @@ const messages = {
     importPreviewZoomIn: 'Zoom in',
     importPreviewZoomOut: 'Zoom out',
     importPreviewZoomReset: 'Reset zoom',
-    importPreviewZoomWheelHint: 'Ctrl+scroll to zoom'
+    importPreviewZoomWheelHint: 'Ctrl+scroll to zoom',
+    multivalueAdvanced: 'Advanced',
+    multivalueAdvancedAria: 'Advanced options for this field'
   },
   de: {
     editDocument: 'Eigenschaften bearbeiten',
@@ -185,7 +187,9 @@ const messages = {
     importPreviewZoomIn: 'Vergrößern',
     importPreviewZoomOut: 'Verkleinern',
     importPreviewZoomReset: 'Zoom zurücksetzen',
-    importPreviewZoomWheelHint: 'Strg+Scrollen zum Zoomen'
+    importPreviewZoomWheelHint: 'Strg+Scrollen zum Zoomen',
+    multivalueAdvanced: 'Erweitert',
+    multivalueAdvancedAria: 'Erweiterte Optionen für dieses Feld'
   },
   ro: {
     editDocument: 'Editează proprietăți',
@@ -277,7 +281,9 @@ const messages = {
     importPreviewZoomIn: 'Mărire',
     importPreviewZoomOut: 'Micșorare',
     importPreviewZoomReset: 'Resetare zoom',
-    importPreviewZoomWheelHint: 'Ctrl+scroll pentru zoom'
+    importPreviewZoomWheelHint: 'Ctrl+scroll pentru zoom',
+    multivalueAdvanced: 'Avansat',
+    multivalueAdvancedAria: 'Opțiuni avansate pentru acest câmp'
   }
 }
 

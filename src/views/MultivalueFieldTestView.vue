@@ -29,6 +29,15 @@
       </v-col>
       <v-col cols="12" md="6">
         <MultivalueField
+          v-model="values5"
+          label="Compact + Import (mock)"
+          :current-locale="locale"
+          compact
+          :import-from-doc="mockImport"
+        />
+      </v-col>
+      <v-col cols="12" md="6">
+        <MultivalueField
           v-model="values4"
           label="Read-only"
           :current-locale="locale"
@@ -54,7 +63,8 @@ export default {
       values1: [],
       values2: ['Alpha', 'Beta', 'Gamma'],
       values3: [],
-      values4: ['Read', 'Only']
+      values4: ['Read', 'Only'],
+      values5: ['One', 'Two']
     }
   },
   methods: {

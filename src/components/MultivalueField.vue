@@ -1,48 +1,92 @@
 <template>
-  <v-card 
-    variant="outlined" 
-    class="pa-3 d-flex flex-column"
-    :class="{ 'multivalue-field-error': error }"
+  <v-card
+    variant="outlined"
+    class="d-flex flex-column"
+    :class="[
+      compact ? 'pa-2 multivalue-field--compact' : 'pa-3',
+      { 'multivalue-field-error': error }
+    ]"
     :data-field-uuid="dataFieldUuid"
   >
-    <div class="d-flex align-center justify-between mb-2" style="gap: 8px; width: 100%;">
-      <div class="text-subtitle-2" style="min-width: 0; flex: 1;" :class="error ? 'text-error' : 'text-medium-emphasis'">
+    <div
+      class="d-flex align-start justify-space-between mb-1 multivalue-title-row"
+      style="gap: 8px; width: 100%;"
+    >
+      <div
+        :class="[compact ? 'text-body-2' : 'text-subtitle-2', error ? 'text-error' : 'text-medium-emphasis']"
+        style="min-width: 0; flex: 1;"
+      >
         {{ displayLabel }}
         <span v-if="error" class="text-error text-caption ml-1">({{ t(currentLocale, 'fieldRequired') || 'Required' }})</span>
       </div>
-      <v-btn
-        v-if="!readonly"
-        size="small"
-        variant="outlined"
-        color="error"
-        :disabled="entries.length === 0"
-        @click="onClear"
+      <div
+        v-if="!readonly && (entries.length > 0 || importFromDoc)"
+        class="d-flex flex-wrap align-center justify-end flex-shrink-0 multivalue-title-actions"
+        :style="compact ? 'gap: 4px 8px;' : 'gap: 6px 10px;'"
       >
-        <v-icon start size="small">mdi-delete-sweep</v-icon>
-        {{ t(currentLocale, 'clear') }}
-      </v-btn>
+        <Transition name="multivalue-clear-fade">
+          <v-btn
+            v-if="entries.length > 0"
+            key="multivalue-clear"
+            :size="compact ? 'x-small' : 'small'"
+            variant="outlined"
+            color="error"
+            class="multivalue-clear-btn"
+            @click="onClear"
+          >
+            <v-icon start :size="compact ? 16 : 'small'">mdi-delete-sweep</v-icon>
+            {{ t(currentLocale, 'clear') }}
+          </v-btn>
+        </Transition>
+        <v-checkbox
+          v-if="importFromDoc"
+          v-model="showImportAdvanced"
+          :label="t(currentLocale, 'multivalueAdvanced')"
+          :aria-label="t(currentLocale, 'multivalueAdvancedAria')"
+          density="compact"
+          hide-details
+          color="primary"
+          class="multivalue-advanced-checkbox mt-0 pt-0"
+        />
+      </div>
     </div>
-    <p v-if="hint" class="text-caption text-medium-emphasis mb-2">{{ hint }}</p>
+    <p v-if="hint" class="text-caption text-medium-emphasis" :class="compact ? 'mb-1' : 'mb-2'">{{ hint }}</p>
 
-    <v-row dense>
-      <v-col cols="12" class="d-flex flex-column" style="gap: 8px;">
-        <div class="multivalue-chips d-flex align-center flex-wrap" style="gap: 4px; min-height: 32px;">
-          <template v-if="entries.length > 0">
+    <p
+      v-if="readonly && entries.length === 0"
+      class="text-medium-emphasis text-body-2"
+      :class="compact ? 'mb-1' : 'mb-2'"
+    >
+      —
+    </p>
+
+    <div
+      v-else
+      class="d-flex flex-column multivalue-field-input-stack"
+      :style="compact ? 'gap: 6px;' : 'gap: 8px;'"
+    >
+        <v-expand-transition>
+          <div
+            v-if="entries.length > 0"
+            key="multivalue-chips"
+            class="multivalue-chips d-flex align-center flex-wrap"
+            :class="{ 'multivalue-chips--scroll': compact }"
+            :style="compact ? 'gap: 3px;' : 'gap: 4px;'"
+          >
             <v-chip
               v-for="entry in entries"
               :key="entry.key"
-              size="small"
+              :size="compact ? 'x-small' : 'small'"
               variant="tonal"
               closable
               :disabled="readonly || removingKey !== null"
-              class="ma-1"
+              :class="compact ? 'ma-0' : 'ma-1'"
               @click:close="(e) => handleRemoveByKey(e, entry.key)"
             >
               {{ entry.value }}
             </v-chip>
-          </template>
-          <span v-else-if="readonly" class="text-medium-emphasis text-body2">—</span>
-        </div>
+          </div>
+        </v-expand-transition>
         <div v-if="!readonly" class="d-flex align-center flex-wrap" style="gap: 8px;">
           <v-text-field
             v-model="pendingInput"
@@ -51,45 +95,55 @@
             hide-details
             variant="outlined"
             class="multivalue-add-input"
-            style="max-width: 280px; min-width: 140px; flex: 1;"
+            :style="compact ? 'max-width: 260px; min-width: 120px; flex: 1;' : 'max-width: 280px; min-width: 140px; flex: 1;'"
             @keydown.enter.prevent="commitAdd"
           />
           <v-btn
-            size="small"
+            :size="compact ? 'x-small' : 'small'"
             variant="tonal"
             color="primary"
             :disabled="!hasPendingValue"
             @click="commitAdd"
           >
-            <v-icon start size="small">mdi-plus</v-icon>
+            <v-icon start :size="compact ? 16 : 'small'">mdi-plus</v-icon>
             {{ t(currentLocale, 'add') }}
           </v-btn>
         </div>
-        <div v-if="!readonly && importFromDoc" class="d-flex align-center flex-wrap" style="gap: 8px;">
-          <v-text-field
-            v-model="importDocId"
-            :placeholder="t(currentLocale, 'importFromDocPlaceholder')"
-            density="compact"
-            hide-details
-            variant="outlined"
-            style="max-width: 260px; min-width: 140px; flex: 1;"
-            :disabled="importLoading"
-            @keydown.enter.prevent="doImport"
-          />
-          <v-btn
-            size="small"
-            variant="tonal"
-            color="primary"
-            :loading="importLoading"
-            :disabled="!importDocIdTrimmed"
-            @click="doImport"
+        <v-expand-transition>
+          <div
+            v-if="!readonly && importFromDoc && showImportAdvanced"
+            key="multivalue-import"
+            class="multivalue-import-transition-root"
           >
-            <v-icon start size="small">mdi-file-import</v-icon>
-            {{ t(currentLocale, 'import') }}
-          </v-btn>
-        </div>
-      </v-col>
-    </v-row>
+            <div
+              class="d-flex align-center flex-wrap multivalue-import-row"
+              style="gap: 8px;"
+            >
+              <v-text-field
+                v-model="importDocId"
+                :placeholder="t(currentLocale, 'importFromDocPlaceholder')"
+                density="compact"
+                hide-details
+                variant="outlined"
+                :style="compact ? 'max-width: 260px; min-width: 120px; flex: 1;' : 'max-width: 260px; min-width: 140px; flex: 1;'"
+                :disabled="importLoading"
+                @keydown.enter.prevent="doImport"
+              />
+              <v-btn
+                :size="compact ? 'x-small' : 'small'"
+                variant="tonal"
+                color="primary"
+                :loading="importLoading"
+                :disabled="!importDocIdTrimmed"
+                @click="doImport"
+              >
+                <v-icon start :size="compact ? 16 : 'small'">mdi-file-import</v-icon>
+                {{ t(currentLocale, 'import') }}
+              </v-btn>
+            </div>
+          </div>
+        </v-expand-transition>
+    </div>
 
     <v-snackbar
       v-model="snackbar.show"
@@ -154,6 +208,11 @@ export default {
     hint: {
       type: String,
       default: ''
+    },
+    /** Tighter layout (e.g. edit view with many multivalue fields): smaller chips, scrollable chip area. */
+    compact: {
+      type: Boolean,
+      default: false
     }
   },
   emits: ['update:modelValue'],
@@ -161,6 +220,8 @@ export default {
     return {
       pendingInput: '',
       importDocId: '',
+      /** When true, doc-id import row is shown below “Add value” (requires importFromDoc). */
+      showImportAdvanced: false,
       importLoading: false,
       removingKey: null, // Key of entry being removed (avoids double-delete when same value appears twice)
       snackbar: {
@@ -278,12 +339,16 @@ export default {
 </script>
 
 <style scoped>
+.multivalue-field-input-stack {
+  width: 100%;
+  min-width: 0;
+}
 .multivalue-chips {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 4px;
-  min-height: 32px;
+  min-height: 0;
 }
 .multivalue-add-input {
   flex: 1 1 auto;
@@ -291,5 +356,35 @@ export default {
 .multivalue-field-error {
   border-color: rgb(var(--v-theme-error)) !important;
   border-width: 2px !important;
+}
+.multivalue-chips--scroll {
+  max-height: 7.5rem;
+  overflow-y: auto;
+  overflow-x: hidden;
+  align-content: flex-start;
+}
+.multivalue-title-actions {
+  max-width: min(22rem, 100%);
+}
+.multivalue-advanced-checkbox :deep(.v-label) {
+  font-size: 0.8125rem;
+  opacity: 0.92;
+}
+.multivalue-clear-btn {
+  flex-shrink: 0;
+}
+.multivalue-clear-fade-enter-active,
+.multivalue-clear-fade-leave-active {
+  transition: opacity 0.26s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.multivalue-clear-fade-enter-from,
+.multivalue-clear-fade-leave-to {
+  opacity: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .multivalue-clear-fade-enter-active,
+  .multivalue-clear-fade-leave-active {
+    transition-duration: 0.01ms !important;
+  }
 }
 </style>

@@ -162,7 +162,7 @@
                   </div>
                 </transition>
                 <div class="import-form-main">
-                  <div class="import-file-ai-row mb-4">
+                  <div class="import-file-ai-row mb-2">
                     <div class="import-file-ai-field">
                       <v-file-input
                         v-model="fileModel"
