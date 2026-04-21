@@ -34,7 +34,7 @@
                     variant="outlined"
                     density="comfortable"
                     show-size
-                    :hide-details="!pilotFileOverMaxBytes"
+                    :hide-details="false"
                     :error="pilotFileOverMaxBytes"
                     :error-messages="pilotFileTooLargeHintMessage"
                     class="mb-0 import-file-input-ai-pair"

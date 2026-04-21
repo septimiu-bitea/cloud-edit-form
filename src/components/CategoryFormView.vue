@@ -24,7 +24,7 @@
           :error-messages="fieldHasRequiredError(prop) ? (t(currentLocale, 'fieldRequired') || 'This field is required') : ''"
           variant="outlined"
           density="comfortable"
-          hide-details="auto"
+          :hide-details="false"
           clearable
           :data-field-uuid="resolveUuid(prop.id)"
           @update:model-value="emitField(prop.id, $event ?? '')"
@@ -46,7 +46,7 @@
           :error-messages="fieldHasRequiredError(prop) ? (t(currentLocale, 'fieldRequired') || 'This field is required') : ''"
           variant="outlined"
           density="comfortable"
-          hide-details="auto"
+          :hide-details="false"
           :data-field-uuid="resolveUuid(prop.id)"
           @update:model-value="handleMultivalueUpdate(prop.id, Array.isArray($event) ? $event : ($event == null ? [] : [$event]))"
         />
@@ -63,7 +63,7 @@
           :persistent-hint="!!fieldHint(prop)"
           variant="outlined"
           density="comfortable"
-          hide-details="auto"
+          :hide-details="false"
           :data-field-uuid="resolveUuid(prop.id)"
           @update:model-value="emitField(prop.id, $event)"
         />
@@ -81,7 +81,7 @@
           :persistent-hint="!!fieldHint(prop)"
           variant="outlined"
           density="comfortable"
-          hide-details="auto"
+          :hide-details="false"
           :data-field-uuid="resolveUuid(prop.id)"
           @update:model-value="emitField(prop.id, $event != null && $event !== '' ? Number($event) : $event)"
         />
@@ -99,7 +99,7 @@
           :persistent-hint="!!fieldHint(prop)"
           variant="outlined"
           density="comfortable"
-          hide-details="auto"
+          :hide-details="false"
           :data-field-uuid="resolveUuid(prop.id)"
           @update:model-value="emitField(prop.id, $event)"
         />
@@ -116,7 +116,7 @@
           :persistent-hint="!!fieldHint(prop)"
           variant="outlined"
           density="comfortable"
-          hide-details="auto"
+          :hide-details="false"
           :data-field-uuid="resolveUuid(prop.id)"
           @update:model-value="emitField(prop.id, $event)"
         />
@@ -132,7 +132,7 @@
           :error-messages="fieldHasRequiredError(prop) ? (t(currentLocale, 'fieldRequired') || 'This field is required') : ''"
           :hint="fieldHint(prop)"
           :persistent-hint="!!fieldHint(prop)"
-          hide-details="auto"
+          :hide-details="false"
           :data-field-uuid="resolveUuid(prop.id)"
           @update:model-value="emitField(prop.id, !!$event)"
         />
