@@ -1399,7 +1399,7 @@ export default {
   text-shadow: 0 0 10px rgba(34, 211, 238, 0.35);
   word-break: break-word;
 }
-/* Left portrait preview + form: file row stays full width above */
+/* Preview rail (max ⅓ viewport) + form; file row stays full width above */
 .import-main-split {
   display: flex;
   flex-direction: row;
@@ -1408,10 +1408,10 @@ export default {
   min-height: 0;
   width: 100%;
 }
-/* Rail: width reveals from the left like a drawer; inner aside slides in */
+/* Rail: max 1/3 viewport width; drawer reveals from the left */
 .import-preview-rail {
   flex: 0 0 auto;
-  max-width: clamp(220px, 28vw, 320px);
+  max-width: min(33.333vw, 100%);
   overflow: hidden;
   will-change: max-width;
 }
@@ -1439,7 +1439,7 @@ export default {
 }
 .import-preview-aside {
   flex-shrink: 0;
-  width: clamp(220px, 28vw, 320px);
+  width: min(33.333vw, 100%);
   max-width: 100%;
   position: sticky;
   top: 0.5rem;
@@ -1458,14 +1458,13 @@ export default {
   overflow: hidden;
   background: rgb(var(--v-theme-surface));
 }
-/* Tall narrow viewport (portrait page strip) */
+/* A4 portrait page area + zoom toolbar; total height capped to viewport */
 .import-preview-frame.import-preview-portrait {
   display: flex;
   flex-direction: column;
   width: 100%;
-  height: min(72vh, 720px);
-  max-height: min(72vh, 720px);
-  min-height: min(72vh, 720px);
+  max-height: min(90vh, calc(100vh - 2rem));
+  min-height: 0;
 }
 .import-preview-zoom-toolbar {
   flex-shrink: 0;
@@ -1483,8 +1482,12 @@ export default {
   font-variant-numeric: tabular-nums;
   cursor: default;
 }
+/* Document viewport: A4 portrait (210×297 mm) at rail width; cap height to viewport */
 .import-preview-zoom-scroller {
-  flex: 1 1 auto;
+  flex: 0 0 auto;
+  width: 100%;
+  aspect-ratio: 210 / 297;
+  max-height: min(calc(33.333vw * 297 / 210), calc(90vh - 5.5rem));
   min-height: 0;
   overflow: auto;
   position: relative;
@@ -1500,7 +1503,7 @@ export default {
 .import-preview-iframe {
   display: block;
   flex: 1 1 auto;
-  min-height: min(48vh, 360px);
+  min-height: 0;
   width: 100%;
   height: 100%;
   border: 0;
@@ -1549,7 +1552,7 @@ export default {
     align-items: stretch;
   }
   .import-preview-rail {
-    max-width: min(22rem, 100%);
+    max-width: min(33.333vw, 100%);
     align-self: center;
   }
   .import-preview-panel-enter-from,
@@ -1557,7 +1560,7 @@ export default {
     max-width: 0 !important;
   }
   .import-preview-aside {
-    width: min(22rem, 100%);
+    width: min(33.333vw, 100%);
     margin-inline: auto;
     position: static;
     border-radius: 6px;
