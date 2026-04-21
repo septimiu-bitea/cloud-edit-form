@@ -84,7 +84,16 @@ const messages = {
     importPilotLogLoadProps: ':: [SCHEMA] Loading category fields & mandatory flags',
     importPilotLogStep2: ':: [PROMPT/2] Property lattice — dispatching extraction job',
     importPilotLogStep2Poll: ':: [QUEUE] Awaiting completion — d.velop Pilot channel (step 2)',
-    importPilotLogMerge: ':: [PATCH] Merging suggested values into form state'
+    importPilotLogMerge: ':: [PATCH] Merging suggested values into form state',
+    importPreviewTitle: 'Preview',
+    importPreviewLoading: 'Loading preview…',
+    importPreviewTruncated: 'Preview truncated ({0} of the file shown).',
+    importPreviewUnsupported: 'No inline preview for this file type.',
+    importPreviewImageUnavailable: 'This image cannot be shown in the browser (try another format or open the file locally).',
+    importPreviewZoomIn: 'Zoom in',
+    importPreviewZoomOut: 'Zoom out',
+    importPreviewZoomReset: 'Reset zoom',
+    importPreviewZoomWheelHint: 'Ctrl+scroll to zoom'
   },
   de: {
     editDocument: 'Eigenschaften bearbeiten',
@@ -167,7 +176,16 @@ const messages = {
     importPilotLogLoadProps: ':: [SCHEMA] Kategoriefelder & Pflichtflags werden geladen',
     importPilotLogStep2: ':: [PROMPT/2] Eigenschaftsraster — Extraktionsauftrag wird gesendet',
     importPilotLogStep2Poll: ':: [QUEUE] Warte auf Abschluss — Pilot Kanal (Schritt 2)',
-    importPilotLogMerge: ':: [PATCH] Vorschläge in Formular übernehmen'
+    importPilotLogMerge: ':: [PATCH] Vorschläge in Formular übernehmen',
+    importPreviewTitle: 'Vorschau',
+    importPreviewLoading: 'Vorschau wird geladen…',
+    importPreviewTruncated: 'Vorschau gekürzt ({0} der Datei angezeigt).',
+    importPreviewUnsupported: 'Keine eingebettete Vorschau für diesen Dateityp.',
+    importPreviewImageUnavailable: 'Dieses Bild kann im Browser nicht angezeigt werden (anderes Format wählen oder Datei lokal öffnen).',
+    importPreviewZoomIn: 'Vergrößern',
+    importPreviewZoomOut: 'Verkleinern',
+    importPreviewZoomReset: 'Zoom zurücksetzen',
+    importPreviewZoomWheelHint: 'Strg+Scrollen zum Zoomen'
   },
   ro: {
     editDocument: 'Editează proprietăți',
@@ -250,7 +268,16 @@ const messages = {
     importPilotLogLoadProps: ':: [SCHEMA] Se încarcă câmpurile și obligatorii',
     importPilotLogStep2: ':: [PROMPT/2] Rețea proprietăți — se trimite extragerea',
     importPilotLogStep2Poll: ':: [QUEUE] Așteptare finalizare — canal Pilot (pas 2)',
-    importPilotLogMerge: ':: [PATCH] Se aplică valorile în formular'
+    importPilotLogMerge: ':: [PATCH] Se aplică valorile în formular',
+    importPreviewTitle: 'Previzualizare',
+    importPreviewLoading: 'Se încarcă previzualizarea…',
+    importPreviewTruncated: 'Previzualizare trunchiată (se arată {0} din fișier).',
+    importPreviewUnsupported: 'Fără previzualizare integrată pentru acest tip de fișier.',
+    importPreviewImageUnavailable: 'Imaginea nu poate fi afișată în browser (încercați alt format sau deschideți fișierul local).',
+    importPreviewZoomIn: 'Mărire',
+    importPreviewZoomOut: 'Micșorare',
+    importPreviewZoomReset: 'Resetare zoom',
+    importPreviewZoomWheelHint: 'Ctrl+scroll pentru zoom'
   }
 }
 

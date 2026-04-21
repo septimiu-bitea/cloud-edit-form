@@ -22,50 +22,190 @@
         <transition :name="pilotSuggestLoading ? 'form-shell-none' : 'form-shell'" appear>
           <div class="import-form-root">
             <div class="import-form-shell">
-              <div class="import-file-ai-row mb-4">
-                <div class="import-file-ai-field">
-                  <v-file-input
-                    v-model="fileModel"
-                    :accept="pilotFileAccept"
-                    :label="t(locale, 'importFileLabel')"
-                    :aria-label="t(locale, 'importFileAria')"
-                    :disabled="importLoading || pilotSuggestLoading"
-                    prepend-icon="mdi-paperclip"
-                    variant="outlined"
-                    density="comfortable"
-                    show-size
-                    :hide-details="false"
-                    :error="pilotFileOverMaxBytes"
-                    :error-messages="pilotFileTooLargeHintMessage"
-                    class="mb-0 import-file-input-ai-pair"
-                    color="primary"
-                  />
-                </div>
-                <transition name="import-pilot-btn" appear>
-                  <div v-if="resolvedFile" class="import-pilot-col">
-                    <v-tooltip location="top" :text="t(locale, 'importPilotSuggest')">
-                      <template #activator="{ props: tipProps }">
-                        <v-btn
-                          v-bind="tipProps"
-                          icon
-                          variant="tonal"
-                          color="secondary"
-                          size="x-large"
-                          class="quantum-pilot-wrap import-pilot-btn flex-shrink-0"
-                          :aria-label="t(locale, 'importPilotSuggest')"
-                          :disabled="!canPilotSuggest"
-                          :loading="pilotSuggestLoading"
-                          @click="runPilotSuggest"
+              <div class="import-main-split">
+                <transition name="import-preview-panel">
+                  <div
+                    v-if="resolvedFile"
+                    key="import-preview-rail"
+                    class="import-preview-rail"
+                  >
+                    <aside
+                      class="import-preview-aside"
+                      :aria-label="t(locale, 'importPreviewTitle')"
+                    >
+                      <div class="text-subtitle-2 mb-2 text-medium-emphasis">
+                        {{ t(locale, 'importPreviewTitle') }}
+                      </div>
+                      <div class="import-preview-frame import-preview-portrait">
+                        <div
+                          v-if="previewLoading"
+                          class="import-preview-state py-10 text-center"
                         >
-                          <v-icon size="26">mdi-robot-outline</v-icon>
-                        </v-btn>
-                      </template>
-                    </v-tooltip>
+                          <v-progress-circular
+                            indeterminate
+                            color="primary"
+                            size="40"
+                            width="3"
+                          />
+                          <p class="text-body-2 text-medium-emphasis mt-3 mb-0">
+                            {{ t(locale, 'importPreviewLoading') }}
+                          </p>
+                        </div>
+                        <v-alert
+                          v-else-if="previewUnsupportedMime"
+                          type="info"
+                          variant="tonal"
+                          density="compact"
+                          class="mb-0 rounded-0"
+                        >
+                          {{ t(locale, 'importPreviewUnsupported') }}
+                        </v-alert>
+                        <template v-else>
+                          <div class="import-preview-zoom-toolbar">
+                            <v-btn
+                              icon
+                              variant="text"
+                              size="small"
+                              density="compact"
+                              class="import-preview-zoom-btn"
+                              :aria-label="t(locale, 'importPreviewZoomOut')"
+                              :disabled="previewZoomClamped <= previewZoomMin"
+                              @click="previewZoomStep(-1)"
+                            >
+                              <v-icon size="20">mdi-magnify-minus-outline</v-icon>
+                            </v-btn>
+                            <span
+                              class="text-caption text-medium-emphasis import-preview-zoom-pct"
+                              :title="t(locale, 'importPreviewZoomWheelHint')"
+                            >
+                              {{ previewZoomPercentLabel }}
+                            </span>
+                            <v-btn
+                              icon
+                              variant="text"
+                              size="small"
+                              density="compact"
+                              class="import-preview-zoom-btn"
+                              :aria-label="t(locale, 'importPreviewZoomIn')"
+                              :disabled="previewZoomClamped >= previewZoomMax"
+                              @click="previewZoomStep(1)"
+                            >
+                              <v-icon size="20">mdi-magnify-plus-outline</v-icon>
+                            </v-btn>
+                            <v-btn
+                              icon
+                              variant="text"
+                              size="small"
+                              density="compact"
+                              class="import-preview-zoom-btn"
+                              :aria-label="t(locale, 'importPreviewZoomReset')"
+                              @click="previewZoomReset"
+                            >
+                              <v-icon size="20">mdi-fit-to-screen-outline</v-icon>
+                            </v-btn>
+                          </div>
+                          <div
+                            class="import-preview-zoom-scroller"
+                            @wheel="onPreviewWheelZoom"
+                          >
+                            <div
+                              class="import-preview-zoom-inner"
+                              :style="previewZoomInnerStyle"
+                            >
+                              <iframe
+                                v-if="importPreviewKind === 'pdf' && previewBlobUrl"
+                                :src="previewBlobUrl"
+                                class="import-preview-iframe"
+                                :title="t(locale, 'importPreviewTitle')"
+                              />
+                              <div
+                                v-else-if="importPreviewKind === 'image' && previewBlobUrl"
+                                class="import-preview-image-wrap"
+                              >
+                                <img
+                                  v-if="!previewImageError"
+                                  :src="previewBlobUrl"
+                                  alt=""
+                                  class="import-preview-img"
+                                  @error="previewImageError = true"
+                                />
+                                <v-alert
+                                  v-else
+                                  type="info"
+                                  variant="tonal"
+                                  density="compact"
+                                  class="mb-0 ma-0 rounded-0"
+                                >
+                                  {{ t(locale, 'importPreviewImageUnavailable') }}
+                                </v-alert>
+                              </div>
+                              <div
+                                v-else-if="importPreviewKind === 'text'"
+                                class="import-preview-text-wrap"
+                              >
+                                <v-alert
+                                  v-if="previewTextTruncated"
+                                  type="info"
+                                  variant="tonal"
+                                  density="compact"
+                                  class="mb-0 rounded-0 import-preview-trunc-bar"
+                                >
+                                  {{ importPreviewTruncatedHint }}
+                                </v-alert>
+                                <pre class="import-preview-pre">{{ previewText }}</pre>
+                              </div>
+                            </div>
+                          </div>
+                        </template>
+                      </div>
+                    </aside>
                   </div>
                 </transition>
-              </div>
+                <div class="import-form-main">
+                  <div class="import-file-ai-row mb-4">
+                    <div class="import-file-ai-field">
+                      <v-file-input
+                        v-model="fileModel"
+                        :accept="pilotFileAccept"
+                        :label="t(locale, 'importFileLabel')"
+                        :aria-label="t(locale, 'importFileAria')"
+                        :disabled="importLoading || pilotSuggestLoading"
+                        prepend-icon="mdi-paperclip"
+                        variant="outlined"
+                        density="comfortable"
+                        show-size
+                        :hide-details="false"
+                        :error="pilotFileOverMaxBytes"
+                        :error-messages="pilotFileTooLargeHintMessage"
+                        class="mb-0 import-file-input-ai-pair"
+                        color="primary"
+                      />
+                    </div>
+                    <transition name="import-pilot-btn" appear>
+                      <div v-if="resolvedFile" class="import-pilot-col">
+                        <v-tooltip location="top" :text="t(locale, 'importPilotSuggest')">
+                          <template #activator="{ props: tipProps }">
+                            <v-btn
+                              v-bind="tipProps"
+                              icon
+                              variant="tonal"
+                              color="secondary"
+                              size="x-large"
+                              class="quantum-pilot-wrap import-pilot-btn flex-shrink-0"
+                              :aria-label="t(locale, 'importPilotSuggest')"
+                              :disabled="!canPilotSuggest"
+                              :loading="pilotSuggestLoading"
+                              @click="runPilotSuggest"
+                            >
+                              <v-icon size="26">mdi-robot-outline</v-icon>
+                            </v-btn>
+                          </template>
+                        </v-tooltip>
+                      </div>
+                    </transition>
+                  </div>
 
-              <template v-if="resolvedFile">
+                  <template v-if="resolvedFile">
                 <v-select
                   v-model="selectedCategoryId"
                   :items="categorySelectItems"
@@ -168,7 +308,9 @@
                     </div>
                   </div>
                 </transition>
-              </template>
+                  </template>
+                </div>
+              </div>
             </div>
           </div>
         </transition>
@@ -223,7 +365,7 @@ import {
   resolveAfterImportUrl,
   sanitizeImportFormDatasetValues
 } from '@/services/documentImport'
-import { fetchCloudDatasetOptionsMap } from '@/services/datasetOptionsCloud'
+import { fetchDatasetOptionsMap } from '@/services/datasetOptionsCloud'
 import {
   fileToBase64Url,
   buildPilotPromptBody,
@@ -288,10 +430,56 @@ export default {
       /** Same as Pilot-allowed MIME + extensions; OS file dialog filter + import validation */
       pilotFileAccept: PILOT_FILE_ACCEPT,
       /** Cloud: `dataSetId` → `{ label, value }[]` for value-list fields */
-      datasetOptionsByDataSetId: {}
+      datasetOptionsByDataSetId: {},
+      /** Blob URL for PDF / image in-browser preview (revoked on change/unmount) */
+      previewBlobUrl: null,
+      previewText: null,
+      previewTextTruncated: false,
+      previewLoading: false,
+      previewUnsupportedMime: false,
+      previewImageError: false,
+      /** Max bytes read into memory for plain-text preview */
+      importPreviewTextMaxBytes: 200000,
+      /** Preview zoom (1 = 100%); inverse-scale wrapper keeps scrollbars usable */
+      previewZoom: 1
     }
   },
   watch: {
+    resolvedFile: {
+      immediate: true,
+      async handler (file) {
+        this.previewZoom = 1
+        this.revokePreviewBlobUrl()
+        this.previewText = null
+        this.previewTextTruncated = false
+        this.previewLoading = false
+        this.previewUnsupportedMime = false
+        this.previewImageError = false
+        if (!file) return
+
+        const mime = resolvePilotDocumentMimeType(file)
+        if (!isPilotDocumentMimeSupported(mime)) {
+          this.previewUnsupportedMime = true
+          return
+        }
+        if (mime === 'text/plain') {
+          this.previewLoading = true
+          try {
+            const max = this.importPreviewTextMaxBytes
+            const slice = file.size > max ? file.slice(0, max) : file
+            this.previewText = await slice.text()
+            this.previewTextTruncated = file.size > max
+          } catch (e) {
+            error('[ImportView] text preview read failed', e)
+            this.previewUnsupportedMime = true
+          } finally {
+            this.previewLoading = false
+          }
+          return
+        }
+        this.previewBlobUrl = URL.createObjectURL(file)
+      }
+    },
     fileModel (val) {
       this.lastPilotCategoryId = null
       if (this.onPremise) return
@@ -421,13 +609,80 @@ export default {
     },
     importLinearIndeterminate () {
       return this.importLoading && this.uploadProgress == null
+    },
+    /** Pilot-supported types: pdf / image / text / null while loading or unsupported */
+    importPreviewKind () {
+      if (!this.resolvedFile || this.previewUnsupportedMime || this.previewLoading) return null
+      const mime = resolvePilotDocumentMimeType(this.resolvedFile)
+      if (mime === 'application/pdf') return 'pdf'
+      if (mime === 'text/plain') return 'text'
+      if (mime.startsWith('image/')) return 'image'
+      return null
+    },
+    importPreviewTruncatedHint () {
+      if (!this.previewTextTruncated) return ''
+      return this.t(
+        this.locale,
+        'importPreviewTruncated',
+        formatByteSizeShort(this.importPreviewTextMaxBytes)
+      )
+    },
+    previewZoomMin () {
+      return 0.25
+    },
+    previewZoomMax () {
+      return 4
+    },
+    previewZoomClamped () {
+      const z = Number(this.previewZoom)
+      if (!Number.isFinite(z) || z <= 0) return 1
+      return Math.round(Math.min(this.previewZoomMax, Math.max(this.previewZoomMin, z)) * 100) / 100
+    },
+    previewZoomInnerStyle () {
+      const z = this.previewZoomClamped
+      const inv = 100 / z
+      return {
+        transform: `scale(${z})`,
+        transformOrigin: 'top left',
+        width: `${inv.toFixed(4)}%`,
+        minHeight: `${inv.toFixed(4)}%`
+      }
+    },
+    previewZoomPercentLabel () {
+      return `${Math.round(this.previewZoomClamped * 100)}%`
     }
+  },
+  beforeUnmount () {
+    this.revokePreviewBlobUrl()
   },
   async mounted () {
     await this.bootstrap()
   },
   methods: {
     t,
+    revokePreviewBlobUrl () {
+      if (this.previewBlobUrl) {
+        URL.revokeObjectURL(this.previewBlobUrl)
+        this.previewBlobUrl = null
+      }
+    },
+    previewZoomStep (dir) {
+      const step = 0.1
+      const z = this.previewZoomClamped + dir * step
+      this.previewZoom =
+        Math.round(Math.min(this.previewZoomMax, Math.max(this.previewZoomMin, z)) * 100) / 100
+    },
+    previewZoomReset () {
+      this.previewZoom = 1
+    },
+    onPreviewWheelZoom (e) {
+      if (!e.ctrlKey && !e.metaKey) return
+      e.preventDefault()
+      const delta = e.deltaY > 0 ? -0.1 : 0.1
+      const z = this.previewZoomClamped + delta
+      this.previewZoom =
+        Math.round(Math.min(this.previewZoomMax, Math.max(this.previewZoomMin, z)) * 100) / 100
+    },
     pilotPushLog (key) {
       const line = this.t(this.locale, key)
       this.pilotLogLines.push(line)
@@ -439,7 +694,7 @@ export default {
     },
     /** Drop AI/pasted values that are not valid dataset keys (or label match). */
     applyDatasetSanitize () {
-      if (this.onPremise || !this.catPropsArr.length) return
+      if (!this.catPropsArr.length) return
       this.formData = sanitizeImportFormDatasetValues(
         this.formData,
         this.catPropsArr,
@@ -584,14 +839,16 @@ export default {
         this.catPropsArr = arr
         this.metaIdx = toMetaIndex(arr, { idMap: this.idMap })
         this.datasetOptionsByDataSetId = {}
-        if (!this.onPremise && arr.length) {
+        if (arr.length) {
           try {
-            this.datasetOptionsByDataSetId = await fetchCloudDatasetOptionsMap({
+            this.datasetOptionsByDataSetId = await fetchDatasetOptionsMap({
               base: this.base,
               repoId: this.repoId,
               catPropsArr: arr,
               locale: this.locale,
-              apiKey: this.apiKey
+              apiKey: this.apiKey,
+              onPremise: this.onPremise,
+              categoryId: categoryIdStr
             })
           } catch (e) {
             error('[ImportView] dataset options failed', e)
@@ -1142,6 +1399,173 @@ export default {
   text-shadow: 0 0 10px rgba(34, 211, 238, 0.35);
   word-break: break-word;
 }
+/* Left portrait preview + form: file row stays full width above */
+.import-main-split {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 1.25rem;
+  min-height: 0;
+  width: 100%;
+}
+/* Rail: width reveals from the left like a drawer; inner aside slides in */
+.import-preview-rail {
+  flex: 0 0 auto;
+  max-width: clamp(220px, 28vw, 320px);
+  overflow: hidden;
+  will-change: max-width;
+}
+.import-preview-panel-enter-active,
+.import-preview-panel-leave-active {
+  transition: max-width 0.46s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.import-preview-panel-enter-from,
+.import-preview-panel-leave-to {
+  max-width: 0 !important;
+}
+.import-preview-panel-enter-active .import-preview-aside,
+.import-preview-panel-leave-active .import-preview-aside {
+  transition:
+    transform 0.46s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.32s ease;
+}
+.import-preview-panel-enter-from .import-preview-aside {
+  transform: translateX(-100%);
+  opacity: 0.88;
+}
+.import-preview-panel-leave-to .import-preview-aside {
+  transform: translateX(-100%);
+  opacity: 0.85;
+}
+.import-preview-aside {
+  flex-shrink: 0;
+  width: clamp(220px, 28vw, 320px);
+  max-width: 100%;
+  position: sticky;
+  top: 0.5rem;
+  align-self: flex-start;
+  z-index: 2;
+  box-shadow: 4px 0 28px -10px rgba(0, 0, 0, 0.2);
+  border-radius: 0 6px 6px 0;
+}
+.import-form-main {
+  flex: 1;
+  min-width: 0;
+}
+.import-preview-frame {
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  border-radius: 4px;
+  overflow: hidden;
+  background: rgb(var(--v-theme-surface));
+}
+/* Tall narrow viewport (portrait page strip) */
+.import-preview-frame.import-preview-portrait {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: min(72vh, 720px);
+  max-height: min(72vh, 720px);
+  min-height: min(72vh, 720px);
+}
+.import-preview-zoom-toolbar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 4px 6px;
+  border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  background: rgba(var(--v-theme-surface-variant), 0.38);
+}
+.import-preview-zoom-pct {
+  min-width: 2.85rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  cursor: default;
+}
+.import-preview-zoom-scroller {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  position: relative;
+  overscroll-behavior: contain;
+}
+.import-preview-zoom-inner {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  box-sizing: border-box;
+}
+.import-preview-iframe {
+  display: block;
+  flex: 1 1 auto;
+  min-height: min(48vh, 360px);
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+.import-preview-image-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: auto;
+  padding: 8px;
+  box-sizing: border-box;
+}
+.import-preview-img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  vertical-align: middle;
+}
+.import-preview-text-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.import-preview-trunc-bar {
+  border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  flex-shrink: 0;
+}
+.import-preview-pre {
+  margin: 0;
+  padding: 12px 14px;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+@media (max-width: 959px) {
+  .import-main-split {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .import-preview-rail {
+    max-width: min(22rem, 100%);
+    align-self: center;
+  }
+  .import-preview-panel-enter-from,
+  .import-preview-panel-leave-to {
+    max-width: 0 !important;
+  }
+  .import-preview-aside {
+    width: min(22rem, 100%);
+    margin-inline: auto;
+    position: static;
+    border-radius: 6px;
+    box-shadow:
+      0 4px 24px -8px rgba(0, 0, 0, 0.18),
+      0 0 0 1px rgba(var(--v-border-color), var(--v-border-opacity));
+  }
+}
 .import-fields-placeholder {
   border: 1px dashed rgba(var(--v-border-color), var(--v-border-opacity));
   background: rgba(var(--v-theme-surface-variant), 0.25);
@@ -1209,6 +1633,14 @@ export default {
   }
 }
 @media (prefers-reduced-motion: reduce) {
+  .import-preview-panel-enter-active,
+  .import-preview-panel-leave-active {
+    transition-duration: 0.01ms !important;
+  }
+  .import-preview-panel-enter-active .import-preview-aside,
+  .import-preview-panel-leave-active .import-preview-aside {
+    transition-duration: 0.01ms !important;
+  }
   .import-category-panel-enter-active,
   .import-category-panel-leave-active {
     transition-duration: 0.12s !important;
