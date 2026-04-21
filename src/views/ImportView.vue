@@ -1399,8 +1399,9 @@ export default {
   text-shadow: 0 0 10px rgba(34, 211, 238, 0.35);
   word-break: break-word;
 }
-/* Preview rail (max ⅓ viewport) + form; file row stays full width above */
+/* Preview column width = ⅓ viewport (vw); shared for rail, aside, and A4 height calc */
 .import-main-split {
+  --import-preview-width: 33.333vw;
   display: flex;
   flex-direction: row;
   align-items: flex-start;
@@ -1408,10 +1409,10 @@ export default {
   min-height: 0;
   width: 100%;
 }
-/* Rail: max 1/3 viewport width; drawer reveals from the left */
+/* Rail: drawer reveals from the left; open width matches ⅓ vw */
 .import-preview-rail {
   flex: 0 0 auto;
-  max-width: min(33.333vw, 100%);
+  max-width: var(--import-preview-width);
   overflow: hidden;
   will-change: max-width;
 }
@@ -1439,8 +1440,8 @@ export default {
 }
 .import-preview-aside {
   flex-shrink: 0;
-  width: min(33.333vw, 100%);
-  max-width: 100%;
+  width: var(--import-preview-width);
+  box-sizing: border-box;
   position: sticky;
   top: 0.5rem;
   align-self: flex-start;
@@ -1487,7 +1488,7 @@ export default {
   flex: 0 0 auto;
   width: 100%;
   aspect-ratio: 210 / 297;
-  max-height: min(calc(33.333vw * 297 / 210), calc(90vh - 5.5rem));
+  max-height: min(calc(var(--import-preview-width) * 297 / 210), calc(90vh - 5.5rem));
   min-height: 0;
   overflow: auto;
   position: relative;
@@ -1552,7 +1553,7 @@ export default {
     align-items: stretch;
   }
   .import-preview-rail {
-    max-width: min(33.333vw, 100%);
+    max-width: var(--import-preview-width);
     align-self: center;
   }
   .import-preview-panel-enter-from,
@@ -1560,7 +1561,7 @@ export default {
     max-width: 0 !important;
   }
   .import-preview-aside {
-    width: min(33.333vw, 100%);
+    width: var(--import-preview-width);
     margin-inline: auto;
     position: static;
     border-radius: 6px;
